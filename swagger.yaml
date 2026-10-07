@@ -1,0 +1,201 @@
+openapi: 3.0.3
+
+info:
+  title: DahuaCamOpenGate API
+  description: |
+    HTTP-сервер для управления камерой Dahua и воротами.
+    Предоставляет методы для получения времени с камеры и открытия ворот
+    через trafficSnap API.
+  version: 1.0.0
+
+servers:
+  - url: http://37.204.151.209:35008
+    description: Сервер управления воротами в ЖК Физтехпарк (ГК Основа)
+
+paths:
+
+  /health:
+    get:
+      summary: Проверка работоспособности сервера
+      operationId: health
+      responses:
+        "200":
+          description: Сервер работает нормально
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/time:
+    get:
+      summary: Получить текущее время камеры
+      operationId: getTime
+      description: |
+        Запрашивает текущее время с камеры Dahua через CGI-интерфейс
+        (`global.cgi?action=getCurrentTime`).
+      responses:
+        "200":
+          description: Время успешно получено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeSuccess"
+              example:
+                success: true
+                camera_time: "2026-02-24 12:00:00"
+                local_time: "2026-02-24 12:00:05"
+                is_valid_format: true
+                raw_response: "2026-02-24 12:00:00"
+        "502":
+          description: Ошибка при обращении к камере
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                timeout:
+                  summary: Таймаут подключения
+                  value:
+                    success: false
+                    error: timeout
+                connection_error:
+                  summary: Ошибка подключения
+                  value:
+                    success: false
+                    error: connection_error
+                http_error:
+                  summary: HTTP-ошибка камеры
+                  value:
+                    success: false
+                    error_code: 401
+                    error_message: Unauthorized
+
+  /api/gate/open:
+    post:
+      summary: Открыть ворота
+      operationId: openGate
+      description: |
+        Отправляет команду открытия ворот на камеру Dahua через
+        `trafficSnap.cgi?action=openStrobe`. Все поля тела запроса опциональны.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenGateRequest"
+            example:
+              channel: 1
+              plate_number: "A001AA111"
+              open_type: Normal
+      responses:
+        "200":
+          description: Ворота успешно открыты
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GateSuccess"
+              example:
+                success: true
+                message: Gate opened
+        "502":
+          description: Не удалось открыть ворота (ошибка со стороны камеры)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GateFailure"
+              example:
+                success: false
+                message: Failed to open gate
+
+components:
+  schemas:
+
+    TimeSuccess:
+      type: object
+      required: [success, camera_time, local_time, is_valid_format, raw_response]
+      properties:
+        success:
+          type: boolean
+          example: true
+        camera_time:
+          type: string
+          description: Время камеры в формате "yyyy-MM-dd HH:mm:ss"
+          example: "2026-02-24 12:00:00"
+        local_time:
+          type: string
+          description: Локальное время сервера в момент запроса
+          example: "2026-02-24 12:00:05"
+        is_valid_format:
+          type: boolean
+          description: Соответствует ли ответ камеры ожидаемому формату
+          example: true
+        raw_response:
+          type: string
+          description: Сырой ответ от камеры без изменений
+          example: "2026-02-24 12:00:00"
+
+    ErrorResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          description: Код ошибки (timeout, connection_error и т.д.)
+          example: timeout
+        error_code:
+          type: integer
+          description: HTTP-статус ответа камеры (при HTTP-ошибке)
+          example: 401
+        error_message:
+          type: string
+          description: Текст ответа камеры (при HTTP-ошибке)
+          example: Unauthorized
+
+    OpenGateRequest:
+      type: object
+      properties:
+        channel:
+          type: integer
+          description: Канал камеры
+          default: 1
+          example: 1
+        plate_number:
+          type: string
+          description: Номер автомобиля
+          default: ""
+          example: "A001AA111"
+        open_type:
+          type: string
+          description: Тип открытия
+          default: Normal
+          enum: [Normal, Emergency]
+          example: Normal
+
+    GateSuccess:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Gate opened
+
+    GateFailure:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Failed to open gate
