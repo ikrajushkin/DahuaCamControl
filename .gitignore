@@ -1,3 +1,8 @@
+# Данные пользователя и секреты (коммитить только *.example.json)
+config.json
+allowed_plates.json
+gate_log*.jsonl
+
 # Python
 __pycache__/
 *.py[cod]

@@ -1,0 +1,24 @@
+{
+  "cameras": [
+    {
+      "name": "Ворота — камера 1",
+      "ip": "192.168.84.2",
+      "username": "admin",
+      "password": "ЗАПОЛНИТЕ_ПАРОЛЬ",
+      "channel": 1
+    },
+    {
+      "name": "Ворота — камера 2",
+      "ip": "",
+      "username": "",
+      "password": "",
+      "channel": 1
+    }
+  ],
+  "video": { "width": 640, "height": 360, "subtype": 1 },
+  "anpr_events": ["TrafficJunction"],
+  "heartbeat": 5,
+  "read_timeout": 30,
+  "whitelist_file": "allowed_plates.json",
+  "log_file": "gate_log.jsonl"
+}
