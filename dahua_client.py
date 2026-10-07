@@ -24,7 +24,7 @@ import requests
 from requests.auth import HTTPDigestAuth
 from PIL import Image, ImageDraw
 
-from config import normalize_plate
+from config import ENABLE_DEBUG, applog, normalize_plate
 
 
 # ------------------------- Разбор multipart-потока -------------------------
@@ -266,9 +266,12 @@ class DahuaCamera:
             )
             body = r.text.strip()
             if r.status_code == 200 and body.upper() == "OK":
+                applog("gate", f"[{self.name}] openStrobe: OK")
                 return True, "OK"
+            applog("gate", f"[{self.name}] openStrobe: HTTP {r.status_code}: {body[:120]}")
             return False, f"HTTP {r.status_code}: {body[:120]}"
         except requests.RequestException as e:
+            applog("gate", f"[{self.name}] openStrobe: ошибка сети: {e}")
             return False, str(e)
 
     def get_snapshot(self) -> Optional[bytes]:
@@ -357,6 +360,7 @@ class _ReconnectWorker(threading.Thread):
                 self.monitor(text)
             except Exception:
                 pass
+        applog("worker", text)
 
     def _reconnect_delay(self) -> float:
         self.attempt += 1
@@ -429,6 +433,8 @@ class AnprWorker(_ReconnectWorker):
                         pending_event = ev
                         pending_ts = time.time()
                         plate = extract_plate(ev)
+                        if ENABLE_DEBUG and plate:
+                            applog("anpr", f"[{self.camera.name}] событие: {ev}")
                         if plate:
                             put_latest(self.anpr_q, ANPRResult(
                                 self.camera.name, plate, None, pending_ts,
@@ -446,6 +452,8 @@ class AnprWorker(_ReconnectWorker):
                                 group_id=(pending_event or {}).get("GroupID", ""),
                                 fields=pending_event or {}))
                         else:
+                            if ENABLE_DEBUG:
+                                applog("anpr", f"[{self.camera.name}] снимок без номера (пришлите debug.log для разбора)")
                             put_latest(self.anpr_q, ANPRResult(
                                 self.camera.name, "", jpeg, time.time(),
                                 fields=pending_event or {}))

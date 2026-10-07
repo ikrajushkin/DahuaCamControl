@@ -2,6 +2,12 @@
 config.json
 allowed_plates.json
 gate_log*.jsonl
+debug.log
+
+# Сборка PyInstaller
+build/
+dist/
+*.spec
 
 # Python
 __pycache__/

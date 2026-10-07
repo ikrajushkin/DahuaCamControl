@@ -3,14 +3,59 @@
 - config.json  — настройки камер и приложения (камера 1 обязательна, камера 2 —
   опциональна: панель появляется только если заполнены её ip/username/password);
 - allowed_plates.json — справочник разрешённых номеров (список строк);
-- gate_log.jsonl — журнал ANPR-событий и открытий ворот.
+- gate_log.jsonl — журнал ANPR-событий и открытий ворот;
+- debug.log — диагностический журнал (ошибки/переподключения).
 """
 from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
+from datetime import datetime
 from typing import Any, Dict, List
+
+
+def _data_dir() -> str:
+    """Каталог данных: папка exe в frozen-режиме, папка исходников иначе."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+# ------------------------- Диагностический журнал -------------------------
+
+# Полный диагностический режим (включается аргументом --debug в app.py)
+ENABLE_DEBUG = False
+
+DEBUG_LOG = os.path.join(_data_dir(), "debug.log")
+
+
+def applog(source: str, message: str) -> None:
+    """Диагностический журнал (debug.log рядом с exe/config.json).
+
+    Потокобезопасно; ошибки записи проглатываются, чтобы журнал не ломал работу.
+    Всегда пишутся: запуск, ошибки, подключения воркеров. Полный режим (--debug)
+    дополнительно пишет каждые N секунд признаки «потоки живы» и heartbeat.
+    """
+    try:
+        line = "{} [{}] {}".format(
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"), source, message
+        )
+        with _applog_lock():
+            with open(DEBUG_LOG, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+    except OSError:
+        pass
+
+
+def _applog_lock() -> threading.Lock:
+    lock = getattr(applog, "_lock", None)
+    if lock is None:
+        lock = threading.Lock()
+        setattr(applog, "_lock", lock)
+    return lock
+
 
 # Транслитерация «похожих» символов кириллических номеров в латиницу.
 # Камеры Dahua могут отдавать один и тот же номер и латиницей, и кириллицей.
@@ -128,10 +173,17 @@ class PlateBook:
 
 def log_jsonl(path: str, record: Dict[str, Any]) -> None:
     """Потокобезопасная дозапись события в JSONL-лог."""
+    with _jsonl_lock():
+        try:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except OSError as e:
+            applog("config", f"не удалось записать лог {path}: {e}")
+
+
+def _jsonl_lock() -> threading.Lock:
     lock = getattr(log_jsonl, "_lock", None)
     if lock is None:
         lock = threading.Lock()
         setattr(log_jsonl, "_lock", lock)
-    with lock:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return lock
