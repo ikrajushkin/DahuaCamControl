@@ -28,3 +28,5 @@ env/
 # Логи и временные файлы
 *.log
 tmp/
+
+DAHUA_HTTP_API V3.52 for BITRU.pdf
