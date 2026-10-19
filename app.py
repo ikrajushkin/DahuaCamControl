@@ -3,7 +3,7 @@
 Запуск:  python app.py [--config путь_к_config.json] [--debug]
 
 В собранной версии (PyInstaller onefile/onedir) все данные — config.json,
-allowed_plates.json, gate_log.jsonl, debug.log — лежат рядом с exe.
+gate_log.jsonl, debug.log — лежат рядом с exe.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import threading
 import time
 
 import config as config_mod
-from config import DEFAULT_CONFIG, PlateBook, applog, load_config, save_config
+from config import DEFAULT_CONFIG, applog, load_config, save_config
 from gui import App
 
 
@@ -55,8 +55,7 @@ def main() -> int:
 
     try:
         cfg = load_config(config_path)
-        book = PlateBook(os.path.join(base, cfg["whitelist_file"]))
-        app = App(cfg, book, os.path.join(base, cfg["log_file"]))
+        app = App(cfg, os.path.join(base, cfg["log_file"]))
         if args.debug:
             _watchdog(app)
     except Exception:

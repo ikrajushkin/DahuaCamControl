@@ -1,0 +1,365 @@
+=== PAGE 601 ===
+ 
+Intelligent Traffic APIs 600 
+export command 
+(exportAsyncFileByConditon). 
+Request Example 
+http://<server>/cgi-bin/trafficRecord.cgi?action=downloadFile&Type=TrafficSnapEventInfo&filename=
+RecordFile01 
+ 
+Response Params ( binary in body ) 
+Response Example 
+HTTP/1.1 200 OK 
+Server: Device/1.0 
+Content-Type: application/octet-stream 
+Content-Length: xxx 
+ 
+<File Data…> 
+10.4 Traffic Snap Operation 
+10.4.1 Open Strobe 
+Request URL 
+http://<server>/cgi-bin/trafficSnap.cgi?action=openStrobe 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+channel 
+int 
+R 
+video channel index which starts from 
+1. 
+1 
+info 
+object 
+R 
+info 
+ 
+openType 
+char[] 
+R 
+For now, the value is fixed to "Normal" "Normal" 
+plateNumber 
+char[] 
+R 
+the plateNumber of the TrafficCar. 
+046XRW 
+Request Example 
+http://192.168.1.108/cgi-
+bin/trafficSnap.cgi?action=openStrobe&channel=1&info.openType=Normal&info.plateNumber=046X
+RW 
+ 
+Response Params ( OK in body ) 
+Response Example 
+OK 
+10.4.2 Close Strobe 
+Request URL 
+http://<server>/cgi-bin/api/trafficSnap/closeStrobe 
+Method 
+POST 
+Request Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+info 
+object 
+O 
+close strobe params 
+null 
++location 
+int32 
+O 
+lane number, default 0 
+0 
+Request Example 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 602 ===
+ 
+Intelligent Traffic APIs 601 
+{ 
+    "info": { 
+        "location": 0 
+    } 
+} 
+ 
+Response Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Response Example 
+{} 
+ 
+10.4.3 Open/Close Unlicensed Vehicle Detection 
+Request URL 
+http://<server>/cgi-bin/trafficSnap.cgi? 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+action 
+char[] 
+R 
+this value can be open and close 
+open 
+channel 
+int 
+R 
+video channel index which starts from 
+1. 
+1 
+name 
+char[] 
+R 
+name 
+UnlicensedVehicle 
+Request Example 
+http://192.168.1.108/cgi-bin/trafficSnap.cgi?action=open&channel=1&name=UnlicensedVehicle 
+ 
+Response Params ( OK in body ) 
+Response Example 
+OK 
+ 
+10.4.4 Manual Snap 
+Take a snapshot manually. For intelligent traffic device, it should use this method to take a snapshot. 
+But, the response is not image data.If you want to get the image data, please follow these steps: 
+1. 
+Use the method mentioned chapter (4.4.3 Subscribe to snapshot) to subscribe the image data, 
+and the eventcode is "TrafficManualSnap". 
+2. 
+Use the "manSnap"to take a snapshot manually. 
+3. 
+In the connection which built in the Step 1, the device will send the image data. 
+Request URL 
+http://<server>/cgi-bin/trafficSnap.cgi?action=manSnap 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+channel 
+int 
+R 
+video channel index which starts from 
+1. 
+1 
+Request Example 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 603 ===
+ 
+Intelligent Traffic APIs 602 
+http://192.168.1.108/cgi-bin/trafficSnap.cgi?action=manSnap&channel=1 
+ 
+Response Params ( OK in body ) 
+Response Example 
+OK 
+10.4.5 Get Speed Limit 
+Request URL 
+http://<server>/cgi-bin/api/VideoInAnalyse/getSpeedLimit 
+Method 
+GET 
+Request Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Channel 
+int 
+O 
+Video channel index which starts from 0 
+0 
+LaneNumber 
+int 
+O 
+Lane number which starts from 0 
+0 
+Request Example 
+{ 
+    "Channel": 0, 
+    "LaneNumber": 0 
+} 
+ 
+Response Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+HeavyVehicle 
+int 
+O 
+Heavy vehicle speed limit, unit is km/h 
+7 
+Van 
+int 
+O 
+Van speed limit, unit is km/h 
+100 
+LightVehicle 
+int 
+O 
+Light vehicle speed limit, unit is km/h 
+140 
+Response Example 
+{ 
+ 
+"HeavyVehicle": 70, 
+ 
+"Van": 100, 
+ 
+"LightVehicle": 140 
+} 
+10.4.6 Set Speed Limit 
+Request URL 
+http://<server>/cgi-bin/api/VideoInAnalyse/setSpeedLimit 
+Method 
+POST 
+Request Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Channel 
+int 
+O 
+Video channel index which starts from 0 
+0 
+LaneNumber 
+int 
+O 
+Lane number which starts from 0 
+0 
+HeavyVehicle 
+int 
+O 
+Heavy vehicle speed limit, unit is km/h 
+7 
+Van 
+int 
+O 
+Van speed limit, unit is km/h 
+100 
+LightVehicle 
+int 
+O 
+Light vehicle speed limit, unit is km/h 
+140 
+Request Example 
+{ 
+    "Channel": 0, 
+    "LaneNumber": 0 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 604 ===
+ 
+Intelligent Traffic APIs 603 
+ 
+"HeavyVehicle": 70, 
+ 
+"Van": 100, 
+ 
+"LightVehicle": 140 
+} 
+ 
+Response Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Response Example 
+{ } 
+10.4.7 Set Enable Under Speed or Not 
+Request URL 
+http://<server>/cgi-bin/api/VideoInAnalyse/enableUnderSpeed 
+Method 
+POST 
+Request Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Channel 
+int 
+R 
+Video channel index which starts from 0 
+0 
+LaneNumber 
+uint16 
+O 
+Lane number which starts from 0 
+0 
+Enable 
+bool 
+O 
+Enable or not, true is enable, false is not 
+enable 
+false 
+Request Example 
+{ 
+    "Channel":0, 
+    "LaneNumber":0, 
+    "Enable":false 
+} 
+ 
+Response Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Response Example 
+{ } 
+ 
+10.5 Traffic Parking 
+10.5.1 Get the Specific Parking Space Status 
+Request URL 
+http://<server>/cgi-bin/trafficSnap.cgi?action=getParkingSpaceStatus 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+channel 
+int32 
+O 
+video channel index which starts from 1. 
+1 
+condition 
+object 
+O 
+ 
+ 
++Lane 
+int[] 
+O 
+The Lane value which starts from 0. 
+[1,2] 
++ResponseLev
+el 
+int 
+O 
+The Level value , refer to condition 
+0 
+DAHUA_HTTP_API V3.52 for BITRU

@@ -15,10 +15,10 @@
       "channel": 1
     }
   ],
-  "video": { "width": 640, "height": 360, "subtype": 1 },
+  "video": { "width": 640, "height": 360, "subtype": 1, "set_resolution": "",
+             "mode": "snapshot", "interval": 0.4, "photo_scale": 0.5 },
   "anpr_events": ["TrafficJunction"],
   "heartbeat": 5,
   "read_timeout": 30,
-  "whitelist_file": "allowed_plates.json",
   "log_file": "gate_log.jsonl"
 }

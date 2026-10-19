@@ -1,0 +1,346 @@
+=== PAGE 36 ===
+ 
+General APIs 35 
+ 
+ 
+4  General APIs 
+The APIs specified in this section are supported by all video products. 
+4.1 APIs of RTSP 
+4.1.1 Get Real-Time Stream 
+Get real-time media stream APIs use RTSP protocol, please refer to RFC 2326 for detail. The rtsp 
+service default port is 554. The IP Camera supports both TCP and UDP transmission forms. It 
+supplies digest authentication ways. The authentication process is similar with "3.5 Authentication". 
+ 
+The format of the RTSP URL parameter for getting real-time media stream is as follows. 
+URL 
+rtsp://<server>:[port]/cam/realmonitor 
+Method 
+DESCRIBE, SETUP, PLAY, PAUSE, TEARDOWN, ...  
+URL Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+channel 
+int 
+R 
+Video channel number, starting from 1. 
+1 
+subtype 
+int 
+R 
+The stream type, including main stream and sub 
+stream.  
+Execute the "4.5.1 Getting Maximum Number of 
+Sub Streams" command to get the number of sub 
+streams.  
+Optional values: 
+0: Main stream 
+1: Sub stream 1 
+2: Sub stream 2 
+0 
+URL Example 
+rtsp://192.168.1.108:554/cam/realmonitor?channel=1&subtype=0 
+Step 1: Obtain media description by executing the DESCRIBE command. 
+Request Example 
+DESCRIBE rtsp://192.168.1.108/cam/realmonitor?channel=1&subtype=0 RTSP/1.0 
+CSeq: 1 
+User-Agent: LibVLC/3.0.5 
+ 
+Response Example 
+RTSP/1.0 200 OK 
+CSeq: 1 
+Server: Rtsp Server/3.0 
+Content-Base: rtsp://192.168.1.108/cam/realmonitor?channel=1&subtype=0/ 
+Content-Length: xxx 
+Content-Type: application/sdp 
+ 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 37 ===
+ 
+General APIs 36 
+v=0 
+o=- 2253484289 2253484289 IN IP4 0.0.0.0 
+s=Media Server 
+c=IN IP4 0.0.0.0 
+t=0 0 
+a=control:* 
+a=range:npt=now- 
+m=video 0 RTP/AVP 98 
+a=control:trackID=0 
+a=framerate:25.000000 
+a=rtpmap:98 H265/90000 
+a=recvonly 
+Step 2: Establish a transmission channel for each media by executing the SETUP command. 
+Take RTP over UDP as an example. Establish the UDP socket for receiving and sending UDP 
+packages on 63088 and 63089 interfaces. 
+Request Example 
+SETUP rtsp://192.168.1.108/cam/realmonitor?channel=1&subtype=0/trackID=0 RTSP/1.0 
+CSeq: 2 
+User-Agent: LibVLC/3.0.5 
+Transport: RTP/AVP;unicast;client_port=63088-63089 
+ 
+Response Example 
+RTSP/1.0 200 OK 
+CSeq: 2 
+Server: Rtsp Server/3.0 
+Session: 1546116282447;timeout=60 
+Transport: RTP/AVP/UDP;unicast;client_port=63088-63089;server_port=24764-24765;ssrc=71B0AF
+DC 
+ 
+Step 3: Execute the play command to play the media, and receive and send RTP and RTCP data 
+through the UDP socket established in step 2. 
+Request Example 
+PLAY rtsp://192.168.1.108/cam/realmonitor?channel=1&subtype=0/ RTSP/1.0 
+CSeq: 3 
+User-Agent: LibVLC/3.0.5 
+Session: 1546116282447 
+Range: npt=0.000- 
+ 
+Response Example 
+RTSP/1.0 200 OK 
+CSeq: 3 
+Server: Rtsp Server/3.0 
+Session: 1546116282447 
+Range: npt=0.000- 
+RTP-Info: url=trackID=0;seq=45020;rtptime=1907404764 
+ 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 38 ===
+ 
+General APIs 37 
+Step 4: Execute the TEARDOWN command to stop playing the media, and then disable the UDP 
+socket. 
+Request Example 
+TEARDOWN rtsp://192.168.1.108/cam/realmonitor?channel=1&subtype=0/ RTSP/1.0 
+CSeq: 4 
+User-Agent: LibVLC/3.0.5 
+Session: 1546116282447 
+ 
+Response Example 
+RTSP/1.0 200 OK 
+CSeq: 4 
+Server: Rtsp Server/3.0 
+Session: 1546116282447 
+ 
+4.1.2 Get Playback Stream 
+It's similar with "4.1.1 Get Real-Time Stream", except that there are parameters "starttime" and 
+"endtime". 
+URL 
+rtsp://<server>:[port]/cam/playback 
+Method 
+DESCRIBE, SETUP, PLAY, PAUSE, TEARDOWN, ...  
+URL Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+channel 
+int 
+R 
+The video channel index which starts 
+from 1 
+1 
+starttime 
+char[32
+] 
+O 
+The playback begin time 
+2012_09_15_12_37_05 
+endtime 
+char[32
+] 
+O 
+The playback end time 
+2012_09_15_18_34_14 
+starttimeRealU
+TC 
+char[32
+] 
+O 
+UTC time of the playback begin. 
+And (starttime, endtime) are 
+mutually exclusive; If both exist, use 
+RealUTC time first. 
+2012_09_15_04_37_05 
+endtimeRealU
+TC 
+char[32
+] 
+O 
+UTC time of the playback end. 
+And (starttime, endtime) are 
+mutually exclusive; If both exist, use 
+RealUTC time first. 
+2012_09_15_10_37_05 
+URL Example 
+rtsp://192.168.1.108:554/cam/playback?channel=1&starttime=2012_09_15_12_37_05&endtime=201
+2_09_15_18_34_14 
+4.1.3 Get File Stream 
+It's similar with "4.1.1 Get Real-Time Stream". The filename with absolute path of file stream to get 
+is place in rtsp url. 
+URL 
+rtsp://<server>:[port]/<path to filename> 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 39 ===
+ 
+General APIs 38 
+Method 
+DESCRIBE, SETUP, PLAY, PAUSE, TEARDOWN, ...  
+URL Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+URL Example 
+rtsp://192.168.1.108:554//mnt/sd/2015-09-16/001/dav/20/20.32.08-20.32.28[M][0@0][0].dav 
+4.1.4 Get MJPG Stream 
+Get a video stream encoded by mjpg ( motion jpeg ). 
+Request URL 
+http://<server>/cgi-bin/mjpg/video.cgi 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+channel 
+int 
+R 
+The video channel index which starts from 1 
+1 
+subtype 
+int 
+R 
+The stream type, It can be the following value: 
+0-Main Stream 
+1-Extra Stream 1 
+2-Extra Stream 2 
+0 
+Request Example 
+http://192.168.1.108/cgi-bin/mjpg/video.cgi?channel=1&subtype=0 
+ 
+Response Params ( multipart, binary in body ) 
+<binary data> : JPEG image data 
+Response Example 
+HTTP/1.1 200 OK 
+Server: Device/1.0 
+Content-Type: multipart/x-mixed-replace; boundary=<boundary> 
+ 
+--<boundary> 
+Content-Type: image/jpeg 
+Content-Length:<image size> 
+ 
+<JPEG image data> 
+--<boundary> 
+Content-Type: image/jpeg 
+Content-Length:<image size> 
+ 
+<JPEG image data> 
+--<boundary> 
+…… 
+ 
+4.1.5 Create RTSP Pull and Authentication Token 
+Request URL 
+http://<server>/cgi-bin/api/TokenManager/createToken 
+Method 
+POST 
+Request Params ( JSON format in body ) 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 40 ===
+ 
+General APIs 39 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Channel 
+uint32 
+R 
+video channel number which starts from 
+0 
+0 
+Request Example 
+{ 
+    "Channel": 0 
+} 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Token 
+char[128] 
+R 
+Token 
+"AwDSEci0j4EUW6pU
+z5bcQ0yK8_Rbq0vaU
+sUwqQKmFoUpuMJj
+Oxy9kgcV6BlCty8U" 
+Response Example 
+{ 
+    "Token": "AwDSEci0j4EUW6pUz5bcQ0yK8_Rbq0vaUsUwqQKmFoUpuMJjOxy9kgcV6BlCty8U" 
+} 
+ 
+4.2 Configure Manager 
+4.2.1 Get and Set Configure 
+ 
+Get Configure 
+Get configure detail by name. Each configure name has it’s specific configure detail. Please refer to 
+configure detail APIs in later [Config] chapters. 
+Request URL 
+http://<server>/cgi-bin/configManager.cgi?action=getConfig 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Sample 
+name 
+string 
+R 
+The name of the configure 
+SmartEncode 
+Request Example 
+http://<server>/cgi-bin/configManager.cgi?action=getConfig&name=General 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Sample 
+table 
+object 
+R 
+The configure table object. 
+ 
++<config name> 
+string/object/o
+bject[] 
+R 
+The configure detail of 
+the 
+requested configure name. Each 
+configure name has it’s specific 
+configure detail. Please refer to 
+configure detail apis in later 
+chapters. 
+ 
+Response Example 
+table.General.MachineID=20832748927 
+DAHUA_HTTP_API V3.52 for BITRU

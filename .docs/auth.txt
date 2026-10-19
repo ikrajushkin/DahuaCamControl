@@ -1,0 +1,151 @@
+=== PAGE 34 ===
+ 
+Definitions 33 
+HTTP/1.1 400 Bad Request 
+Server: Device/1.0 
+Content-Type: application/json 
+Content-Length: <length> 
+ 
+{ 
+ 
+"ErrorCode" : 10086, 
+ 
+"ErrorMsg" : "Bad Request!" 
+} 
+Reponse Example: If the request fits with syntax but an error occurs while the server handles it, 
+the response would like this: 
+HTTP/1.1 500 Internal Server Error 
+Server: Device/1.0 
+Content-Type: application/json 
+Content-Length: <length> 
+ 
+{ 
+ 
+"ErrorCode" : 10097 
+ 
+"ErrorMsg" : "Internal Server Error!" 
+} 
+3.4 Authentication 
+Video products support digest authentication, see RFC 7616 for detail. If the http request sent by 
+client does not provide valid "Authorization" header information, video products would return HTTP 
+status code 401 and some information for authentication, then client should calculate authentication 
+information according to RFC 7616, and sent request again with authentication information using 
+“Authorization” header. Video products return the required resource only if authorization information 
+correct. 
+1. When the client does not provoding digest authentication or the client calculates digest 
+authentication with expired "nonce" data, video product reply 401 with information for 
+authorization. 
+Request Example: The client send request without authentication infomation 
+GET /cgi-bin/magicBox.cgi?action=getLanguageCaps HTTP/1.1 
+User-Agent: client/1.0 
+Content-Length: 0 
+ 
+Reponse Example: The device send 401 reponse with parameters for authentication calculation. 
+HTTP/1.1 401 Unauthorized 
+Server: Device/1.0 
+WWW-Authenticate: Digest realm="Device_00408CA5EA04",  
+nonce="000562fd20ef95ad", qop="auth", 
+opaque="5ccc069c403ebaf9f0171e9517f40e41" 
+ 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 35 ===
+ 
+Definitions 34 
+2. Then the client generate "nc" and "cnonce", calculates the digest authorization using 
+"username" "password" "HTTP method" "URI" "nc" "cnonce" "realm" "nonce" , according to RFC 
+7616, and then sends it to video product again. If the digest authorization is correct, the video 
+product will reply HTTP status code 200 with the response data. If digest authorization is not 
+correct, the video product will reply HTTP status code 403 . 
+Request Example: The client send request again with authentication information ( suppose the 
+password of admin user is "abcd1234" ) 
+GET /cgi-bin/magicBox.cgi?action=getLanguageCaps HTTP/1.1 
+User-Agent: client/1.0 
+Authorization: Digest username="admin", realm="Device_00408CA5EA04",  
+nonce="000562fd20ef95ad", nc=00000001, cnonce="0a4f113b", qop="auth",  
+uri="/cgi-bin/magicBox.cgi?action=getLanguageCaps",  
+response="dfd0f24bed4c336d20c8f0729dd5dbc8" 
+opaque="5ccc069c403ebaf9f0171e9517f40e41" 
+Content-Length: 0 
+ 
+Reponse Example: If the authentication information is correct, the device send 200 reponse. 
+HTTP/1.1 200 OK 
+Server: Device/1.0 
+Content-Type: text/plain 
+Content-Length: <length> 
+ 
+Languages=SimpChinese,English,French 
+Reponse Example: If the authentication information is not correct, the device send 403 reponse. 
+HTTP/1.1 403 Forbidden 
+Server: Device/1.0 
+Content-Length: 0 
+ 
+3.5 Conventions 
+3.5.1 Channels 
+For requests containing the param ‘channel’ like : 
+http://<server>/cgi-bin/mjpg/video.cgi[?channel=<ChannelNo>] 
+ChannelNo: integer, must starts from 1. Default is 1 if not present.  
+But for responses, the ‘ChannelNo’ should start from 0. In other words, the request channel 1 
+equals response channel 0. 
+ 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 36 ===
+ 
+General APIs 35 
+ 
+ 
+4  General APIs 
+The APIs specified in this section are supported by all video products. 
+4.1 APIs of RTSP 
+4.1.1 Get Real-Time Stream 
+Get real-time media stream APIs use RTSP protocol, please refer to RFC 2326 for detail. The rtsp 
+service default port is 554. The IP Camera supports both TCP and UDP transmission forms. It 
+supplies digest authentication ways. The authentication process is similar with "3.5 Authentication". 
+ 
+The format of the RTSP URL parameter for getting real-time media stream is as follows. 
+URL 
+rtsp://<server>:[port]/cam/realmonitor 
+Method 
+DESCRIBE, SETUP, PLAY, PAUSE, TEARDOWN, ...  
+URL Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+channel 
+int 
+R 
+Video channel number, starting from 1. 
+1 
+subtype 
+int 
+R 
+The stream type, including main stream and sub 
+stream.  
+Execute the "4.5.1 Getting Maximum Number of 
+Sub Streams" command to get the number of sub 
+streams.  
+Optional values: 
+0: Main stream 
+1: Sub stream 1 
+2: Sub stream 2 
+0 
+URL Example 
+rtsp://192.168.1.108:554/cam/realmonitor?channel=1&subtype=0 
+Step 1: Obtain media description by executing the DESCRIBE command. 
+Request Example 
+DESCRIBE rtsp://192.168.1.108/cam/realmonitor?channel=1&subtype=0 RTSP/1.0 
+CSeq: 1 
+User-Agent: LibVLC/3.0.5 
+ 
+Response Example 
+RTSP/1.0 200 OK 
+CSeq: 1 
+Server: Rtsp Server/3.0 
+Content-Base: rtsp://192.168.1.108/cam/realmonitor?channel=1&subtype=0/ 
+Content-Length: xxx 
+Content-Type: application/sdp 
+ 
+DAHUA_HTTP_API V3.52 for BITRU

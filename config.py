@@ -13,7 +13,7 @@ import os
 import sys
 import threading
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 
 def _data_dir() -> str:
@@ -66,11 +66,21 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         {"name": "Ворота — камера 1", "ip": "", "username": "", "password": "", "channel": 1},
         {"name": "Ворота — камера 2", "ip": "", "username": "", "password": "", "channel": 1},
     ],
-    "video": {"width": 640, "height": 360, "subtype": 1},
+    # video.mode: 'snapshot' (по умолчанию) — опрос снимков snapshot.cgi: полное
+    # разрешение с матрицы (не зависит от подпотоков) и без «замерзания» потока;
+    # 'stream' — MJPEG mjpg/video.cgi (больше FPS, но может подолгу молчать).
+    # video.width/video.height — размер окна видео в GUI (масштаб отображения).
+    # video.photo_scale — размер фото авто ПОД видео относительно видео:
+    #   0.5 — вдвое меньше (по умолчанию), 1.0 — в размер видео.
+    # video.set_resolution ('stream') — смена кодирования потока НА КАМЕРЕ.
+    "video": {"width": 640, "height": 360, "subtype": 1, "set_resolution": "",
+              "mode": "snapshot", "interval": 0.4, "photo_scale": 0.5},
     "anpr_events": ["TrafficJunction"],
     "heartbeat": 5,
     "read_timeout": 30,
-    "whitelist_file": "allowed_plates.json",
+    # Периодическое ЧТЕНИЕ БД номеров камеры (разделы 10.7.x API, только чтение):
+    # enable=False — не синхронизировать; sync_interval=0 — один раз при запуске.
+    "camera_whitelist": {"enable": True, "sync_interval": 300},
     "log_file": "gate_log.jsonl",
 }
 
@@ -85,6 +95,22 @@ def normalize_plate(plate: str) -> str:
 def is_camera_configured(cam: Dict[str, Any]) -> bool:
     """Камера считается настроенной, если заполнены ip, username и password."""
     return all(str(cam.get(k, "")).strip() for k in ("ip", "username", "password"))
+
+
+def plate_decision(cam_allow: bool, cam_block: bool,
+                   cam_available: bool = True) -> Tuple[bool, str]:
+    """Итог сверки номера по БД камеры (ТОЛЬКО ЧТЕНИЕ): (разрешён, метка).
+
+    Локальный список не используется: решение принимает камера (AllowListDB /
+    BlockListDB) или оператор. При недоступной БД камеры решение не принимается.
+    """
+    if not cam_available:
+        return False, "справочник камеры недоступен"
+    if cam_allow:
+        return True, "ЕСТЬ в справочнике камеры"
+    if cam_block:
+        return False, "ЗАПРЕЩЁН (блок-лист камеры)"
+    return False, "НЕТ в справочнике камеры"
 
 
 def load_config(path: str) -> Dict[str, Any]:
@@ -103,72 +129,6 @@ def load_config(path: str) -> Dict[str, Any]:
 def save_config(cfg: Dict[str, Any], path: str) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
-
-
-class PlateBook:
-    """Справочник разрешённых номеров (JSON-файл со списком строк)."""
-
-    def __init__(self, path: str):
-        self.path = path
-        self._lock = threading.Lock()
-        self._plates: List[str] = []
-        self._load()
-
-    def _load(self) -> None:
-        if not os.path.exists(self.path):
-            self._plates = []
-            return
-        try:
-            with open(self.path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                data = data.get("plates", [])
-            self._plates = [str(p).strip() for p in data if str(p).strip()]
-        except (OSError, json.JSONDecodeError):
-            self._plates = []
-
-    def save(self) -> None:
-        with self._lock:
-            with open(self.path, "w", encoding="utf-8") as f:
-                json.dump(self._plates, f, ensure_ascii=False, indent=2)
-
-    def contains(self, plate: str) -> bool:
-        target = normalize_plate(plate)
-        with self._lock:
-            return any(normalize_plate(p) == target for p in self._plates)
-
-    def add(self, plate: str) -> bool:
-        """Добавить номер в справочник. True — если номер был добавлен (раньше отсутствовал)."""
-        plate = plate.strip()
-        if not plate:
-            return False
-        with self._lock:
-            target = normalize_plate(plate)
-            if any(normalize_plate(p) == target for p in self._plates):
-                return False
-            self._plates.append(plate.upper())
-        self.save()
-        return True
-
-    def items(self) -> List[str]:
-        with self._lock:
-            return list(self._plates)
-
-    def remove(self, plate: str) -> bool:
-        """Удалить номер из справочника. True — если номер был найден и удалён."""
-        target = normalize_plate(plate)
-        with self._lock:
-            new = [p for p in self._plates if normalize_plate(p) != target]
-            removed = len(new) != len(self._plates)
-            self._plates = new
-        if removed:
-            self.save()
-        return removed
-
-    def reload(self) -> None:
-        """Перечитать справочник с диска (после ручного редактирования файла)."""
-        with self._lock:
-            self._load()
 
 
 def log_jsonl(path: str, record: Dict[str, Any]) -> None:

@@ -1,0 +1,820 @@
+=== PAGE 579 ===
+ 
+Intelligent Traffic APIs 578 
+ 
+ 
+10 Intelligent Traffic APIs  
+10.1 Intelligent Traffic Event 
+10.1.1 [Event] TrafficJunction 
+Event Code 
+TrafficJunction 
+Event action 
+Start/Stop 
+Event index 
+0 
+Event Data 
+Name 
+Type 
+R/O 
+Description 
+Example 
++GroupID 
+int 
+O 
+The id of event group. 
+ 
++CountInGroup 
+int 
+O 
+Event count in the event group. 
+1 
++IndexInGroup 
+int 
+O 
+The index of this event in the event 
+group, start from 1. 
+1 
++Lane 
+int 
+O 
+Lane number, start from 0. 
+0 
++TriggerType 
+int 
+O 
+Trigger type. It can be: 0—car 
+detector, 1—radar, 2—video. 
+0 
++Speed 
+int 
+O 
+Vehicle speed, unit is km/hour. 
+60 
++Vehicle 
+object 
+O 
+The information of vehicle object. 
+ 
+++BoundingBox 
+int[4] 
+R 
+The detected car bounding box, 4 
+interge, refer to x's value of left-top 
+point, y's value of left-top point, x's 
+value of right-bottom point, y's 
+value 
+of 
+right-bottom 
+point. 
+Coordinate remap to 0 — 8192. 
+[253, 780, 447, 1000] 
+++Text 
+char[] 
+O 
+Vehicle logo. 
+Audi 
+++SubText 
+char[] 
+O 
+Vehicle sub logo. 
+A6 
+++SubBrand 
+int 
+O 
+Vehicle sub brand index. 
+5 
+++BrandYear 
+int 
+O 
+Vehicle brand year index. 
+2 
++Object 
+object 
+R 
+Number plate info 
+ 
+++Image 
+object 
+O 
+Car plate image 
+ 
++++Offset 
+uint 
+O 
+Offset in binary data 
+125230 
++++Length 
+uint 
+O 
+Image size, in bytes 
+10000 
++++Width 
+uint 
+O 
+Image width 
+100 
++++Height 
+uint 
+O 
+Image height 
+50 
++TrafficCar 
+object 
+O 
+Traffic Car info. 
+ 
+++PlateNumber 
+char[] 
+R 
+Car plate number. 
+"xxxxxxxxx" 
+++PlateType 
+char[] 
+O 
+Plate type. 
+"DoubleYellow" 
+++PlateColor 
+char[] 
+O 
+Plate color, ex: "Yellow", "Blue", … 
+etc. 
+"Yellow" 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 580 ===
+ 
+Intelligent Traffic APIs 579 
+++VehicleColor 
+char[] 
+O 
+Vehicle 
+color, 
+ex: 
+"Yellow", 
+"Blue", … etc. 
+"White" 
+++BoundingBox 
+int[4] 
+R 
+The detected plate bounding box, 4 
+interge, refer to x's value of left-top 
+point, y's value of left-top point, x's 
+value of right-bottom point, y's 
+value 
+of 
+right-bottom 
+point. 
+Coordinate remap to 0 — 8192. 
+[253, 780, 447, 1000] 
+++Country 
+char[] 
+O 
+Country info. Max string length is 
+19. 
+"xx" 
+++Speed 
+int 
+O 
+Vehicle speed, unit is km/hour. 
+60 
+++OriginalVehicl
+e 
+object 
+O 
+Car body cutout 
+ 
++++Offset 
+uint 
+R 
+Offset in binary data 
+1043085 
++++Length 
+uint 
+R 
+Image size, in bytes 
+218585 
+++Event 
+char[] 
+O 
+The 
+event 
+info, 
+ex: 
+"TrafficJunction". 
+"TrafficJunction" 
++CommInfo 
+object 
+O 
+Traffic event common info. 
+ 
+++Seat 
+object[] 
+O 
+Vehicle front seat info. 
+ 
++++Type 
+char[] 
+O 
+Front 
+seat 
+type. 
+It 
+can 
+be: 
+"Main""Slave". 
+"Main" 
++++Status 
+char[][] 
+O 
+Some driver status. It can be some 
+of 
+the 
+following: 
+"Smoking", 
+"Calling". 
+["Calling", "Smoking"] 
++++SunShade 
+string 
+O 
+Sunshade 
+status. 
+It 
+can 
+be: 
+"Unknow", 
+"WithSunShade", 
+"WithoutSunShade". 
+"WithSunShade" 
++++ShadePos 
+int[4] 
+O 
+The detected sun shade bounding 
+box, 4 interge, refer to x's value of 
+left-top point, y's value of left-top 
+point, x's value of right-bottom 
+point, y's value of right-bottom 
+point. Coordinate remap to 0 — 
+8192. 
+ 
++++SafeBelt 
+char[] 
+O 
+SafeBelt 
+status. 
+It 
+can 
+be: 
+"Unknow", 
+"WithSafeBelt", 
+"WithoutSafeBelt". 
+WithoutSafeBelt 
++SceneImage 
+object 
+O 
+Scene image 
+ 
+++IndexInData 
+uint 
+O 
+The image number in the uploaded 
+image data 
+0 
+++Offset 
+uint 
+R 
+Offset in binary data 
+0 
+++Length 
+uint 
+R 
+Image size, in bytes 
+52000 
+++Width 
+uint 
+O 
+Image width 
+100 
+++Height 
+uint 
+O 
+Image height 
+50 
+ 
+Event Response Example ( multipart , key=value format in body , binary data in body ) ( response to 
+4.4.3 snap subscription ) 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 581 ===
+ 
+Intelligent Traffic APIs 580 
+--<boundary> 
+Content-Type: text/plain 
+Content-Length: <length> 
+ 
+Events[0].EventBaseInfo.Code=TrafficJunction 
+Events[0].EventBaseInfo.Action=Pulse 
+Events[0].EventBaseInfo.Index=0 
+Events[0].GroupID=123 
+Events[0].CountInGroup=3 
+Events[0].IndexInGroup=1 
+Events[0].Lane=0 
+Events[0].Vehicle.BoundingBox[0]=1341 
+Events[0].Vehicle.BoundingBox[1]=2451 
+Events[0].Vehicle.BoundingBox[2]=4513 
+Events[0].Vehicle.BoundingBox[3]=4135 
+Events[0].Vehicle.Text=Audi 
+Events[0].Vehicle.SubText=A6L 
+Events[0].Vehicle.SubBrand=5 
+Events[0].Vehicle.BrandYear=2 
+Events[0].TrafficCar.RecNo=123 
+Events[0].TrafficCar.PlateNumber=AC00003 
+Events[0].TrafficCar.PlateColor=Yellow 
+Events[0].TrafficCar.VehicleColor=Blue 
+Events[0].TrafficCar.BoundingBox[0]=1341 
+Events[0].TrafficCar.BoundingBox[1]=2451 
+Events[0].TrafficCar.BoundingBox[2]=4513 
+Events[0].TrafficCar.BoundingBox[3]=4135 
+Events[0].TrafficCar.Country=China 
+Events[0].CommInfo.Seat[0].Type=Main 
+Events[0].CommInfo.Seat[0].Status[0]=Smoking 
+Events[0].CommInfo.Seat[0].SunShade=WithSunShade 
+Events[0].CommInfo.Seat[0].ShadePos[0]=2021 
+Events[0].CommInfo.Seat[0].ShadePos[1]=3041 
+Events[0].CommInfo.Seat[0].ShadePos[2]=2151 
+Events[0].CommInfo.Seat[0].ShadePos[3]=3661 
+Events[0].CommInfo.Seat[0].SafeBelt=WithoutSafeBelt 
+… 
+--<boundary> 
+Content-Type: image/jpeg 
+Content-Length: <image size> 
+ 
+<Jpeg image data> 
+--<boundary> 
+10.1.2 [Event] TrafficRetrograde 
+When detects vehicle retrograde, send this event. 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 582 ===
+ 
+Intelligent Traffic APIs 581 
+Event params is the same as TrafficJunction, except for event Code is TrafficRetrograde. 
+10.1.3 [Event] TrafficJam 
+When detects traffic jam, send this event. 
+Event Code 
+TrafficJam 
+Event action 
+Start/Stop 
+Event index 
+0 
+Event Data 
+Name 
+Type 
+R/O 
+Description 
+Example 
++GroupID 
+int 
+O 
+The id of event group. 
+123 
++CountInGroup 
+int 
+O 
+Event count in the event group. 
+1 
++IndexInGroup 
+int 
+O 
+The index of this event in the event 
+group, start from 1. 
+1 
++Lane 
+int 
+O 
+Lane number, start from 0. 
+0 
++StartJaming 
+int 
+O 
+Start jam time, UTC seconds. 
+123456789 
++AlarmInterval 
+int 
+O 
+Alarm interval, unit is second. 
+180 
++JamLenght 
+int 
+O 
+Jam length, percentage of the lane. 70 
++JamRealLengt
+h 
+int 
+O 
+Jam real length, unit is metre. 
+120 
+ 
+Event Response Example ( multipart , key=value format in body , binary data in body ) ( response to 
+4.4.3 snap subscription ) 
+--<boundary> 
+Content-Type: text/plain 
+Content-Length: <length> 
+ 
+Events[0].EventBaseInfo.Code=TrafficJam 
+Events[0].EventBaseInfo.Action=Pulse 
+Events[0].EventBaseInfo.Index=0 
+Events[0].GroupID=123 
+Events[0].CountInGroup=3 
+Events[0].IndexInGroup=1 
+Events[0].Lane=0 
+Events[0].StartJaming=123456789 
+Events[0].AlarmInterval=180 
+Events[0].JamLenght=70 
+Events[0].JamRealLength=120 
+… 
+--<boundary> 
+Content-Type: image/jpeg 
+Content-Length: <image size> 
+ 
+<Jpeg image data> 
+--<boundary> 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 583 ===
+ 
+Intelligent Traffic APIs 582 
+10.1.4 [Event] TrafficUnderSpeed 
+When detects vehicle under speed, send this event. 
+Event params is the same as TrafficJunction, except for event Code is TrafficUnderSpeed, and 
+add following params: 
+Event Code 
+TrafficUnderSpeed 
+Event action 
+Start/Stop 
+Event index 
+0 
+Event Data 
+Name 
+Type 
+R/O 
+Description 
+Example 
++SpeedLimit 
+int[2] 
+O 
+Speed limit, 2 integer, min speed 
+and max speed. 
+[60,120] 
++UnderSpeedin
+gPercentage 
+int 
+O 
+Percentage of under speed. 
+20 
++… 
+ 
+ 
+The other event parameters are the 
+same as TrafficJunction 
+ 
+ 
+Event Response Example ( multipart , key=value format in body , binary data in body ) ( response to 
+4.4.3 snap subscription ) 
+--<boundary> 
+Content-Type: text/plain 
+Content-Length: <length> 
+ 
+Events[0].EventBaseInfo.Code=TrafficUnderSpeed 
+Events[0].EventBaseInfo.Action=Pulse 
+Events[0].EventBaseInfo.Index=0 
+Events[0].GroupID=123 
+Events[0].CountInGroup=3 
+Events[0].IndexInGroup=1 
+Events[0].Lane=0 
+Events[0].Vehicle.BoundingBox[0]=1341 
+Events[0].Vehicle.BoundingBox[1]=2451 
+Events[0].Vehicle.BoundingBox[2]=4513 
+Events[0].Vehicle.BoundingBox[3]=4135 
+Events[0].Vehicle.Text=Audi 
+Events[0].Vehicle.SubText=A6L 
+Events[0].Vehicle.SubBrand=5 
+Events[0].Vehicle.BrandYear=2 
+Events[0].TrafficCar.RecNo=123 
+Events[0].SpeedLimit[0]=60 
+Events[0].SpeedLimit[1]=120 
+Events[0].UnderSpeedingPercentage=20 
+… 
+--<boundary> 
+Content-Type: image/jpeg 
+Content-Length: <image size> 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 584 ===
+ 
+Intelligent Traffic APIs 583 
+ 
+<Jpeg image data> 
+--<boundary> 
+10.1.5 [Event] TrafficOverSpeed 
+When detects vehicle over speed, send this event. 
+Event params is the same as TrafficJunction, except for event Code is TrafficOverSpeed, and 
+add following params: 
+Event Code 
+TrafficOverSpeed 
+Event action 
+Start/Stop 
+Event index 
+0 
+Event Data 
+Name 
+Type 
+R/O 
+Description 
+Example 
++SpeedLimit 
+int[2] 
+O 
+Speed limit, 2 integer, min speed 
+and max speed. 
+[60,120] 
++UnderSpeedin
+gPercentage 
+int 
+O 
+Percentage of over speed. 
+20 
++… 
+ 
+ 
+The other event parameters are the 
+same as TrafficJunction 
+ 
+ 
+Event Response Example ( multipart , key=value format in body , binary data in body ) ( response to 
+4.4.3 snap subscription ) 
+--<boundary> 
+Content-Type: text/plain 
+Content-Length: <length> 
+ 
+Events[0].EventBaseInfo.Code=TrafficOverSpeed 
+Events[0].EventBaseInfo.Action=Pulse 
+Events[0].EventBaseInfo.Index=0 
+Events[0].GroupID=123 
+Events[0].CountInGroup=3 
+Events[0].IndexInGroup=1 
+Events[0].Lane=0 
+Events[0].Vehicle.BoundingBox[0]=1341 
+Events[0].Vehicle.BoundingBox[1]=2451 
+Events[0].Vehicle.BoundingBox[2]=4513 
+Events[0].Vehicle.BoundingBox[3]=4135 
+Events[0].Vehicle.Text=Audi 
+Events[0].Vehicle.SubText=A6L 
+Events[0].Vehicle.SubBrand=5 
+Events[0].Vehicle.BrandYear=2 
+Events[0].TrafficCar.RecNo=123 
+Events[0].SpeedLimit[0]=60 
+Events[0].SpeedLimit[1]=120 
+Events[0].UnderSpeedingPercentage=20 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 585 ===
+ 
+Intelligent Traffic APIs 584 
+… 
+--<boundary> 
+Content-Type: image/jpeg 
+Content-Length: <image size> 
+ 
+<Jpeg image data> 
+--<boundary> 
+ 
+10.1.6 [Event] TrafficPedestrain 
+Event Code 
+TrafficPedestrain 
+Event action 
+Pulse 
+Event index 
+0 
+Event Data 
+Name 
+Type 
+R/O 
+Description 
+Example 
++GroupID 
+int 
+O 
+The id of event group. 
+123 
++CountInGroup 
+int 
+O 
+Event count in the event group. 
+3 
++IndexInGroup 
+int 
+O 
+The index of this event in the event 
+group, start from 1. 
+1 
++Lane 
+int 
+O 
+Lane number, start from 0. 
+0 
++Vehicle 
+object 
+O 
+Actually this is the human that 
+detected, not vehicle. 
+ 
+++Category 
+char[] 
+R 
+Must be "Passerby", means this 
+actually is a human. 
+Passerby 
+++BoundingBox 
+int[4] 
+R 
+The detected car bounding box, 4 
+interge, refer to x's value of left-top 
+point, y's value of left-top point, x's 
+value of right-bottom point, y's 
+value 
+of 
+right-bottom 
+point. 
+Coordinate remap to 0 — 8192. 
+[] 
+ 
+Event Response Example ( multipart , key=value format in body , binary data in body ) ( response to 
+4.4.3 snap subscription ) 
+--<boundary> 
+Content-Type: text/plain 
+Content-Length: <length> 
+ 
+Events[0].EventBaseInfo.Code=TrafficPedestrain 
+Events[0].EventBaseInfo.Action=Pulse 
+Events[0].EventBaseInfo.Index=0 
+Events[0].GroupID=123 
+Events[0].CountInGroup=3 
+Events[0].IndexInGroup=1 
+Events[0].Lane=0 
+Events[0].Vehicle.Category=Passerby 
+Events[0].Vehicle.BoundingBox[0]=1341 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 586 ===
+ 
+Intelligent Traffic APIs 585 
+Events[0].Vehicle.BoundingBox[1]=2451 
+Events[0].Vehicle.BoundingBox[2]=4513 
+Events[0].Vehicle.BoundingBox[3]=4135 
+… 
+--<boundary> 
+Content-Type: image/jpeg 
+Content-Length: <image size> 
+ 
+<Jpeg image data> 
+--<boundary> 
+10.1.7 [Event] TrafficParking 
+When detects vehicle illegal parking, send this event. 
+Event params is the same as TrafficJunction, except for event Code is TrafficParking, and 
+remove param "speed", add following params: 
+Event Code 
+TrafficParking 
+Event action 
+Start/Stop 
+Event index 
+0 
+Event Data 
+Name 
+Type 
+R/O 
+Description 
+Example 
++StartParking 
+int 
+O 
+The start time of parking, UTC 
+seconds. 
+6538920 
++AlarmInterval 
+int 
+O 
+The alarm interval. 
+180 
++ParkingAllowed
+Time 
+int 
+O 
+The allowed time of parking. 
+1600 
++… 
+ 
+ 
+The other event parameters are the 
+same as TrafficJunction 
+ 
+ 
+Event Response Example ( multipart , key=value format in body , binary data in body ) ( response to 
+4.4.3 snap subscription ) 
+--<boundary> 
+Content-Type: text/plain 
+Content-Length: <length> 
+ 
+Events[0].EventBaseInfo.Code=TrafficParking 
+Events[0].EventBaseInfo.Action=Pulse 
+Events[0].EventBaseInfo.Index=0 
+Events[0].GroupID=123 
+Events[0].CountInGroup=3 
+Events[0].IndexInGroup=1 
+Events[0].Lane=0 
+Events[0].Vehicle.BoundingBox[0]=1341 
+Events[0].Vehicle.BoundingBox[1]=2451 
+Events[0].Vehicle.BoundingBox[2]=4513 
+Events[0].Vehicle.BoundingBox[3]=4135 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 587 ===
+ 
+Intelligent Traffic APIs 586 
+Events[0].Vehicle.Text=Audi 
+Events[0].Vehicle.SubText=A6L 
+Events[0].Vehicle.SubBrand=5 
+Events[0].Vehicle.BrandYear=2 
+Events[0].TrafficCar.RecNo=123 
+Events[0].StartParking=6538920 
+Events[0].AlarmInterval=180 
+Events[0].ParkingAllowedTime=1600 
+… 
+--<boundary> 
+Content-Type: image/jpeg 
+Content-Length: <image size> 
+ 
+<Jpeg image data> 
+--<boundary> 
+ 
+10.2 Traffic Flow 
+10.2.1 [Event] TrafficFlowStat 
+When traffic flow trigger the rule, send this event 
+Event Code 
+TrafficFlowStat 
+Event action 
+Start/Stop 
+Event index 
+0 
+Event Data 
+Name 
+Type 
+R/O 
+Description 
+Example 
++FlowStates 
+object[] 
+R 
+Traffic flow info, each object in list 
+is traffic flow info about one lane. 
+ 
+++Lane 
+int 
+R 
+Lane number, start from 0. 
+0 
+++Flow 
+int 
+R 
+Traffic flow number. 
+50 
+++Period 
+int 
+R 
+Traffic stat time, unit is minute. 
+5 
+++PeriodByMili 
+int 
+O 
+Traffic stat time, unit is 
+millisecond, value should between 
+0 and 59999. 
+655 
+++DrivingDirecti
+on 
+char[][] 
+O 
+Driving direction, should be an 
+array of three strings: 
+ 
+1st string: direction, can be: 
+"Approach", "Leave" 
+ 
+2nd string: Approach position 
+name 
+ 
+3rd string: Leave position 
+name 
+[ "Approach", 
+"XXXCity", "YYYCity"] 
+ 
+DAHUA_HTTP_API V3.52 for BITRU

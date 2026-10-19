@@ -1,25 +1,29 @@
 """Графический интерфейс (tkinter): панели камер с видео, кнопками открытия ворот,
 фото последнего автомобиля, крупным номером и меткой наличия в справочнике.
 
-Раскладка: [ Панель камеры 1 | Панель камеры 2 (опц.) | Журнал + справочник ]
+Раскладка: [ Панель камеры 1 | Панель камеры 2 (опц.) | Справочник ]
+           [ Журнал (под панелями камер)                           ]
 """
 from __future__ import annotations
 
 import io
 import queue
 import threading
+import time
 import tkinter as tk
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image, ImageTk
 
 import dahua_client as dahua_client_mod
-from config import PlateBook, is_camera_configured, log_jsonl
+from config import is_camera_configured, log_jsonl, plate_decision
 from dahua_client import (ANPRResult, DahuaCamera, AnprWorker, VideoWorker,
-                          fit_image, make_placeholder)
+                          WhitelistSyncWorker, fit_image, make_placeholder,
+                          normalize_plate)
 
 # ------------------------------- Оформление -------------------------------
+
 
 BG = "#0e0e0e"
 PANEL_BG = "#161616"
@@ -31,13 +35,34 @@ ACCENT = "#2f81f7"
 ENTRY_BG = "#1f1f1f"
 
 VIDEO_W, VIDEO_H = 640, 360
-PHOTO_W, PHOTO_H = 320, 180  # уменьшенный вдвое относительно видео формат
+PHOTO_SCALE_DEFAULT = 0.5  # фото авто — вдвое меньше видео (настраивается video.photo_scale)
+PHOTO_SCALE = PHOTO_SCALE_DEFAULT
+PHOTO_W, PHOTO_H = 320, 180  # итоговое фото: video.width/height × photo_scale
 
 F_TITLE = ("Segoe UI", 12, "bold")
 F_BUTTON = ("Segoe UI", 13, "bold")
 F_PLATE = ("Consolas", 26, "bold")
 F_SMALL = ("Segoe UI", 9)
 F_LOG = ("Consolas", 9)
+
+# Ширина справочника справа — «чуть больше» максимальной длины номера
+# (нормализованный номер — до 9 знаков, например «A123BC777»).
+PLATE_MAX_CHARS = 9
+
+
+def normalize_photo_scale(value: Any) -> float:
+    """Масштаб фото авто относительно видео (video.photo_scale): 0.5 — вдвое меньше,
+    1.0 — в размер видео. Значения вне диапазона 0.25..1.0 приводятся к допустимым."""
+    try:
+        scale = float(value)
+    except (TypeError, ValueError):
+        return PHOTO_SCALE_DEFAULT
+    return min(1.0, max(0.25, scale))
+
+
+def photo_size(vw: int, vh: int, scale: float) -> Tuple[int, int]:
+    """Итоговый размер фото под видео vw×vh при масштабе scale (не меньше 1 px)."""
+    return max(1, round(vw * scale)), max(1, round(vh * scale))
 
 
 class CameraPanel(tk.Frame):
@@ -52,6 +77,14 @@ class CameraPanel(tk.Frame):
         self._video_photo: Optional[ImageTk.PhotoImage] = None
         self._photo_photo: Optional[ImageTk.PhotoImage] = None
         self._last: Optional[ANPRResult] = None
+        # Диагностика потока: реальное разрешение кадров и FPS прихода кадров.
+        self._stream_size: Optional[Tuple[int, int]] = None
+        self._fps_count = 0
+        self._fps_ts = 0.0
+        self._fps = 0.0
+        self._base_status = ""
+        self._last_frame_ts = 0.0
+        self._stale_shown = False
         self._build()
         self.show_video_placeholder("подключение…")
         self.show_photo_placeholder("автомобилей пока нет")
@@ -76,11 +109,6 @@ class CameraPanel(tk.Frame):
         row.pack(fill="x", pady=(10, 0))
         self.lbl_plate = tk.Label(row, text="—", bg=PANEL_BG, fg=FG, font=F_PLATE)
         self.lbl_plate.pack(side="left")
-        self.btn_add = tk.Button(
-            row, text="+ в справочник", command=self._on_add, state="disabled",
-            bg=ENTRY_BG, fg=FG, activebackground="#2a2a2a", activeforeground=FG,
-            relief="flat", font=F_SMALL, cursor="hand2")
-        self.btn_add.pack(side="right")
 
         row2 = tk.Frame(self, bg=PANEL_BG)
         row2.pack(fill="x")
@@ -104,15 +132,74 @@ class CameraPanel(tk.Frame):
         self._set_image(self.lbl_photo, make_placeholder(PHOTO_W, PHOTO_H, text), "_photo_photo")
 
     def show_frame(self, jpeg: bytes) -> None:
-        """Отобразить JPEG-кадр live-видео."""
+        """Отобразить JPEG-кадр live-видео (быстро: без лишних конвертаций)."""
         try:
             img = Image.open(io.BytesIO(jpeg))
-            self._set_image(self.lbl_video, fit_image(img, VIDEO_W, VIDEO_H), "_video_photo")
+            # FPS прихода кадров — признак «живого» потока (0.0 = поток завис).
+            self._fps_count += 1
+            now = time.time()
+            if self._fps_ts <= 0:
+                self._fps_ts = now
+            elif now - self._fps_ts >= 2.0:
+                self._fps = self._fps_count / (now - self._fps_ts)
+                self._fps_count = 0
+                self._fps_ts = now
+                self._update_stream_status()
+            size = (img.width, img.height)
+            if size != self._stream_size:
+                # Сообщаем реальное разрешение потока камеры (не размер окна).
+                self._stream_size = size
+                self._update_stream_status()
+            self._last_frame_ts = time.time()
+            if self._stale_shown:
+                self._stale_shown = False
+                self._update_stream_status()
+            if size == (VIDEO_W, VIDEO_H):
+                self._set_image(self.lbl_video, img, "_video_photo")
+            else:
+                self._set_image(self.lbl_video, fit_image(img, VIDEO_W, VIDEO_H), "_video_photo")
         except Exception:
             pass
 
-    def show_anpr(self, res: ANPRResult, allowed: bool) -> None:
-        """Отобразить результат распознавания: фото, номер, метку справочника."""
+    def _update_stream_status(self) -> None:
+        """«поток: 704x576 → окно 640x360 · 12 FPS» — видно и разрешение, и «подвис»."""
+        parts = []
+        if self._stream_size:
+            parts.append(f"{self._stream_size[0]}x{self._stream_size[1]}")
+            parts.append(f"→ окно {VIDEO_W}x{VIDEO_H}")
+        if self._fps:
+            parts.append(f"{self._fps:.0f} FPS")
+        elif self._stream_size:
+            parts.append("кадры не идут")
+        text = "поток: " + " · ".join(parts) if parts else ""
+        self._set_status_now(text)
+
+    def set_status(self, text: str) -> None:
+        self._base_status = text
+        if self._stream_size and not self._stale_shown:
+            # Не затирать диагностическую строку разрешения/FPS.
+            return
+        self._set_status_now(text)
+
+    def tick_status(self) -> None:
+        """Проверка «живости» потока (вызывается из GUI-опроса очередей)."""
+        if not self._stream_size or self._last_frame_ts <= 0:
+            return
+        stale = (time.time() - self._last_frame_ts) > 5.0
+        if stale != self._stale_shown:
+            self._stale_shown = stale
+            if stale:
+                base = f"{self._base_status} · " if self._base_status else ""
+                self._set_status_now(f"{base}поток пропал (нет кадров >5с)")
+            else:
+                self._update_stream_status()
+
+    def _set_status_now(self, text: str) -> None:
+        self.lbl_status.config(text=text)
+
+    def show_anpr(self, res: ANPRResult, allowed: bool, mark: str = "",
+                  available: bool = True) -> None:
+        """Отобразить результат распознавания: фото, номер и метку сверки с камерой."""
         self._last = res
         if res.image:
             try:
@@ -122,12 +209,12 @@ class CameraPanel(tk.Frame):
                 pass
         self.lbl_plate.config(text=res.plate or "—", fg=(FG if res.plate else MUTED))
         if res.plate:
-            if allowed:
-                self.lbl_wh.config(text="✓ ЕСТЬ в справочнике разрешённых", fg=GREEN)
-                self.btn_add.config(state="disabled")
+            if not available:
+                self.lbl_wh.config(text=mark or "справочник камеры недоступен", fg=MUTED)
+            elif allowed:
+                self.lbl_wh.config(text=f"✓ {mark}", fg=GREEN)
             else:
-                self.lbl_wh.config(text="✗ НЕТ в справочнике разрешённых", fg=RED)
-                self.btn_add.config(state="normal")
+                self.lbl_wh.config(text=f"✗ {mark}", fg=RED)
         ts = datetime.fromtimestamp(res.ts).strftime("%H:%M:%S")
         parts = [f"{ts} · {res.camera_name}"]
         if res.code:
@@ -138,8 +225,8 @@ class CameraPanel(tk.Frame):
             parts.append(f"группа {res.group_id}")
         self.lbl_meta.config(text="  ·  ".join(parts))
 
-    def set_status(self, text: str) -> None:
-        self.lbl_status.config(text=text)
+    def _on_open(self) -> None:
+        self.app.open_gate(self.index)
 
     def set_busy(self, busy: bool) -> None:
         self.btn_open.config(state="disabled" if busy else "normal",
@@ -150,65 +237,59 @@ class CameraPanel(tk.Frame):
         setattr(self, attr, photo)  # держим ссылку, иначе GC удалит изображение
         label.config(image=photo, width=photo.width(), height=photo.height())
 
-    def _on_open(self) -> None:
-        self.app.open_gate(self.index)
-
-    def _on_add(self) -> None:
-        if self._last and self._last.plate:
-            self.app.add_plate(self._last.plate, self.index)
-
 
 class SidePanel(tk.Frame):
-    """Правая колонка: журнал событий и управление справочником номеров."""
+    """Правая колонка: справочник номеров камер (ТОЛЬКО ЧТЕНИЕ).
+    Ширина — чуть больше максимальной длины номера (PLATE_MAX_CHARS + 2 знака)."""
 
-    def __init__(self, master: tk.Misc, app: "App", book: PlateBook):
+    LIST_CHARS = PLATE_MAX_CHARS + 2  # ширина списка в знаках — «чуть больше» номера
+
+    def __init__(self, master: tk.Misc, app: "App"):
         super().__init__(master, bg=PANEL_BG, padx=10, pady=8)
         self.app = app
-        self.book = book
 
-        tk.Label(self, text="Справочник разрешённых номеров", bg=PANEL_BG, fg=FG,
-                 font=F_TITLE).pack(anchor="w")
         self.lst = tk.Listbox(self, bg=ENTRY_BG, fg=FG, selectbackground=ACCENT,
-                              relief="flat", font=("Consolas", 11), height=8)
-        self.lst.pack(fill="both", expand=True, pady=(6, 4))
-        row = tk.Frame(self, bg=PANEL_BG)
-        row.pack(fill="x")
-        self.ent = tk.Entry(row, bg=ENTRY_BG, fg=FG, insertbackground=FG,
-                            relief="flat", font=("Consolas", 11))
-        self.ent.pack(side="left", fill="x", expand=True, ipady=4)
-        self.ent.bind("<Return>", lambda _e: self._add())
-        tk.Button(row, text="＋", width=3, command=self._add, bg=ACCENT, fg="white",
-                  activebackground="#1f6fd0", activeforeground="white", relief="flat",
-                  font=("Segoe UI", 11, "bold"), cursor="hand2").pack(side="left", padx=(4, 0))
-        tk.Button(self, text="Удалить выбранный", command=self._del, bg=ENTRY_BG, fg=FG,
-                  activebackground="#2a2a2a", activeforeground=FG, relief="flat",
-                  font=F_SMALL, cursor="hand2").pack(fill="x", pady=(4, 8))
+                              relief="flat", font=("Consolas", 11), height=8,
+                              width=self.LIST_CHARS)
+        # Заголовок переносится точно по ширине списка; шрифт мельче, чтобы
+        # длинные слова («Справочник») не рвались посреди слова в узкой колонке.
+        w = max(self.lst.winfo_reqwidth(), 80)
+        self.lbl_title = tk.Label(self, text="Справочник камер", bg=PANEL_BG, fg=FG,
+                                  font=("Segoe UI", 10, "bold"), justify="left",
+                                  anchor="w", wraplength=w)
+        self.lbl_title.pack(anchor="w")
+        self.lbl_count = tk.Label(self, text="синхронизация…", bg=PANEL_BG, fg=MUTED,
+                                  font=F_SMALL, justify="left", anchor="w", wraplength=w)
+        self.lbl_count.pack(anchor="w")
+        self.lst.pack(fill="both", expand=True, pady=(6, 0))
 
-        tk.Label(self, text="Журнал", bg=PANEL_BG, fg=FG, font=F_TITLE).pack(anchor="w")
-        self.txt = tk.Text(self, bg=ENTRY_BG, fg="#c8c8c8", relief="flat",
-                           font=F_LOG, height=14, wrap="word", state="disabled")
-        self.txt.pack(fill="both", expand=True, pady=(6, 0))
-
-    def refresh_book(self) -> None:
+    def update_camera_list(self, plates: Optional[List[str]], reason: str = "") -> None:
+        """Показать allow-номера БД камер (ТОЛЬКО ЧТЕНИЕ). None — БД недоступна (reason — почему)."""
         self.lst.delete(0, "end")
-        for p in self.book.items():
+        if plates is None:
+            text = "недоступен"
+            if reason:
+                text += f": {reason}"
+            self.lbl_count.config(text=text, fg=RED)
+            return
+        self.lbl_count.config(text=f"{len(plates)} шт. (только чтение)", fg=MUTED)
+        for p in plates:
             self.lst.insert("end", p)
 
-    def _add(self) -> None:
-        plate = self.ent.get().strip()
-        if not plate:
-            return
-        self.ent.delete(0, "end")
-        self.app.add_plate(plate, None)
 
-    def _del(self) -> None:
-        sel = self.lst.curselection()
-        if not sel:
-            return
-        plate = self.lst.get(sel[0])
-        self.app.remove_plate(plate)
+class LogPanel(tk.Frame):
+    """Нижняя строка раскладки: журнал событий под панелями камер (видео + фото)."""
+
+    def __init__(self, master: tk.Misc, app: "App"):
+        super().__init__(master, bg=PANEL_BG, padx=10, pady=8)
+        self.app = app
+        tk.Label(self, text="Журнал", bg=PANEL_BG, fg=FG, font=F_TITLE).pack(anchor="w")
+        self.txt = tk.Text(self, bg=ENTRY_BG, fg="#c8c8c8", relief="flat",
+                           font=F_LOG, height=10, wrap="word", state="disabled")
+        self.txt.pack(fill="both", expand=True, pady=(6, 0))
 
     def log(self, text: str) -> None:
+        """Добавить строку в журнал (буфер ограничен последними 400 строк)."""
         line = datetime.now().strftime("%H:%M:%S") + "  " + text
         self.txt.config(state="normal")
         self.txt.insert("end", line + "\n")
@@ -224,21 +305,25 @@ class App:
 
     POLL_MS = 40  # период опроса очередей (≈25 FPS максимум)
 
-    def __init__(self, cfg: Dict[str, Any], book: PlateBook, log_file: str):
+    def __init__(self, cfg: Dict[str, Any], log_file: str):
         self.cfg = cfg
-        self.book = book
         self.log_file = log_file
         self.cameras: List[Any] = []       # DahuaCamera
-        self.workers: List[Any] = []       # (VideoWorker, AnprWorker, frame_q, anpr_q, status_q)
+        self.workers: List[Any] = []       # (VideoWorker, AnprWorker, frame_q, anpr_q, status_q, wl_q)
         self.gate_thread: Optional[Any] = None
         self._closing = False
+        # Снимки БД номеров камер (ТОЛЬКО ЧТЕНИЕ): name -> {'allow': [...], 'block': [...]}.
+        # Локального справочника нет: решение принимает камера или оператор.
+        self.camera_plates: Dict[str, Dict[str, Any]] = {}
 
         self.root = tk.Tk()
         self.root.title("DahuaCamControl — управление воротами")
         self.root.configure(bg=BG)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.frame: Optional[tk.Frame] = None
         self.panels: List[CameraPanel] = []
         self.side: Optional[SidePanel] = None
+        self.log_panel: Optional[LogPanel] = None
         self._ui_q: "queue.Queue" = queue.Queue()  # UI-события из фоновых потоков
 
         cams = [c for c in cfg["cameras"] if is_camera_configured(c)]
@@ -246,32 +331,98 @@ class App:
             tk.Label(self.root, text="Нет настроенных камер.\nЗаполните config.json "
                                      "(ip, username, password камеры 1).",
                      bg=BG, fg=FG, font=F_TITLE, justify="center").pack(expand=True)
+            self._fit_window(None)
             return
 
-        self.frame = tk.Frame(self.root, bg=BG)
-        self.frame.pack(fill="both", expand=True)
-        # размеры видео/фото берутся из config (video.width/video.height)
+        # размеры видео/фото берутся из config (video.width/video.height,
+        # photo_scale); если окно не влезает в экран, _fit_window уменьшит их
+        # и пересоберёт панели
         video = cfg.get("video", {})
         vw = int(video.get("width", VIDEO_W))
         vh = int(video.get("height", VIDEO_H))
+        globals()["PHOTO_SCALE"] = normalize_photo_scale(video.get("photo_scale"))
         if vw > 0 and vh > 0:
             globals()["VIDEO_W"], globals()["VIDEO_H"] = vw, vh
-            globals()["PHOTO_W"], globals()["PHOTO_H"] = vw // 2, vh // 2
+            globals()["PHOTO_W"], globals()["PHOTO_H"] = photo_size(vw, vh, PHOTO_SCALE)
+        self._build_layout(cams)
+        self._fit_window(cams)
+
+        self.log_panel.log(f"Настроено камер: {len(cams)}")
+        self._start_workers(cams)
+        self.root.after(self.POLL_MS, self._poll)
+
+    def _build_layout(self, cams: List[Dict[str, Any]]) -> None:
+        """Собрать панели камер, журнал под ними и справочник справа (повторно — при подгонке под экран).
+
+        Сетка:  row 0: [камера 0 | камера 1 | … | справочник (rowspan=2)]
+                row 1: [журнал (columnspan=N)                         ]
+        """
+        if self.frame is not None:
+            self.frame.destroy()
+        self.frame = tk.Frame(self.root, bg=BG)
+        self.frame.pack(fill="both", expand=True)
+        self.panels = []
+        n = len(cams)
         for i, cam_cfg in enumerate(cams):
             panel = CameraPanel(self.frame, self, cam_cfg, i)
             panel.grid(row=0, column=i, sticky="nsew", padx=6, pady=6)
             self.panels.append(panel)
-        self.side = SidePanel(self.frame, self, book)
-        self.side.grid(row=0, column=len(cams), sticky="nsew", padx=6, pady=6)
-        self.frame.columnconfigure(len(cams), weight=0)
-        for i in range(len(cams)):
+        # Журнал — под панелями камер (видео + фото), на всю их ширину.
+        self.log_panel = LogPanel(self.frame, self)
+        self.log_panel.grid(row=1, column=0, columnspan=n, sticky="nsew", padx=6, pady=6)
+        # Справочник — справа от видеопотоков, на всю высоту окна.
+        self.side = SidePanel(self.frame, self)
+        self.side.grid(row=0, column=n, rowspan=2, sticky="nsew", padx=6, pady=6)
+        for i in range(n):
             self.frame.columnconfigure(i, weight=1)
-        self.frame.rowconfigure(0, weight=1)
+        self.frame.columnconfigure(n, weight=0)  # справочник — фиксированной ширины
+        self.frame.rowconfigure(0, weight=1)     # камеры — основная высота
+        self.frame.rowconfigure(1, weight=0)     # журнал — по своему содержимому
+        # Замораживаем размер панелей (width/height фрейма + pack_propagate(False)):
+        # длина текстов меток меняется (FPS раз в 2 с, номера, ошибки), а без
+        # заморозки меняется «запрошенный размер» — подрагивают и окно, и раскладка.
+        self.frame.update_idletasks()
+        for p in [*self.panels, self.log_panel, self.side]:
+            p.pack_propagate(False)
+            p.config(width=p.winfo_reqwidth(), height=p.winfo_reqheight())
 
-        self.side.refresh_book()
-        self.side.log(f"Настроено камер: {len(cams)}")
-        self._start_workers(cams)
-        self.root.after(self.POLL_MS, self._poll)
+    def _fit_window(self, cams: Optional[List[Dict[str, Any]]]) -> None:
+        """Вписать окно в экран, отцентрировать и зафиксировать его размер.
+
+        ВАЖНО: без явного geometry() Tk держит размер окна «по содержимому» —
+        любое изменение длины текстов (FPS каждые 2 с, номера, ошибки) меняет
+        запрошенный размер, и окно само «прыгает». Явно заданный размер это
+        отключает. Если содержимое шире экрана — пропорционально уменьшаем
+        видео/фото и пересобираем панели.
+        """
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        # рабочая область: запас под рамки окна и панель задач
+        max_w = max(640, screen_w - 80)
+        max_h = max(480, screen_h - 120)
+        for _ in range(5):
+            self.root.update_idletasks()
+            req_w = self.root.winfo_reqwidth()
+            req_h = self.root.winfo_reqheight()
+            if not cams or (req_w <= max_w and req_h <= max_h):
+                break
+            scale = min(max_w / max(req_w, 1), max_h / max(req_h, 1), 1.0)
+            if scale >= 0.999:
+                break
+            vw = int(VIDEO_W * scale)
+            vh = int(VIDEO_H * scale)
+            if vw < 240 or vh < 135 or (vw, vh) == (VIDEO_W, VIDEO_H):
+                break
+            globals()["VIDEO_W"], globals()["VIDEO_H"] = vw, vh
+            globals()["PHOTO_W"], globals()["PHOTO_H"] = photo_size(vw, vh, PHOTO_SCALE)
+            self._build_layout(cams)
+        self.root.update_idletasks()
+        w = min(self.root.winfo_reqwidth(), max_w)
+        h = min(self.root.winfo_reqheight(), max_h)
+        x = max(0, (screen_w - w) // 2)
+        y = max(0, (screen_h - h) // 2)
+        self.root.geometry(f"{w}x{h}+{x}+{y}")
+        self.root.minsize(min(w, 800), min(h, 500))
 
     def run(self) -> None:
         self.root.mainloop()
@@ -285,6 +436,18 @@ class App:
     def _start_workers(self, cams: List[Dict[str, Any]]) -> None:
         vcfg = self.cfg.get("video", {})
         subtype = int(vcfg.get("subtype", 1))
+        # video.mode: 'snapshot' (по умолчанию) — опрос снимков snapshot.cgi
+        # (полное разрешение, поток не замерзает); 'stream' — MJPEG-поток.
+        # video.set_resolution меняет кодирование потока НА КАМЕРЕ
+        # (Encode[…].Video.VideoResolution); width/height — лишь размер окна в GUI.
+        mode = str(vcfg.get("mode", "snapshot") or "snapshot").strip().lower()
+        interval = float(vcfg.get("interval", 0.4) or 0.4)
+        set_res = str(vcfg.get("set_resolution", "") or "")
+        # Синхронизация БД номеров камеры (whitelist/blacklist камеры):
+        # camera_whitelist.enable=False — выключить; sync_interval=0 — один раз при запуске.
+        wcfg = self.cfg.get("camera_whitelist", {}) or {}
+        wl_enabled = bool(wcfg.get("enable", True))
+        wl_interval = float(wcfg.get("sync_interval", 300) or 0)
         for i, cam_cfg in enumerate(cams):
             cam = DahuaCamera(cam_cfg, name=str(cam_cfg.get("name") or f"Камера {i + 1}"))
             self.cameras.append(cam)
@@ -292,6 +455,7 @@ class App:
             anpr_q: "queue.Queue" = queue.Queue(maxsize=10)
             status_q: "queue.Queue" = queue.Queue(maxsize=20)
             vw = VideoWorker(cam, frame_q, status_q, subtype=subtype,
+                             set_resolution=set_res, mode=mode, interval=interval,
                              monitor=self._thread_log)
             aw = AnprWorker(cam, anpr_q, status_q, self.cfg.get("anpr_events", ["TrafficJunction"]),
                             heartbeat=int(self.cfg.get("heartbeat", 5)),
@@ -299,7 +463,13 @@ class App:
                             monitor=self._thread_log)
             vw.start()
             aw.start()
-            self.workers.append((vw, aw, frame_q, anpr_q, status_q))
+            wl_q = None
+            if wl_enabled:
+                wl_q = queue.Queue(maxsize=2)
+                ww = WhitelistSyncWorker(cam, wl_q, status_q, interval=wl_interval,
+                                         monitor=self._thread_log)
+                ww.start()
+            self.workers.append((vw, aw, frame_q, anpr_q, status_q, wl_q))
 
     def _poll(self) -> None:
         """Единственная точка обновления tkinter: разбор очередей воркеров."""
@@ -312,11 +482,12 @@ class App:
                     break
                 kind = ev[0]
                 if kind == "log":
-                    self.side.log(ev[1])
+                    self.log_panel.log(ev[1])
                 elif kind == "gate_done":
                     self._gate_done(ev[1], ev[2], ev[3])
-            for i, (_vw, _aw, frame_q, anpr_q, status_q) in enumerate(self.workers):
+            for i, (_vw, _aw, frame_q, anpr_q, status_q, wl_q) in enumerate(self.workers):
                 panel = self.panels[i]
+                panel.tick_status()  # индикация «поток пропал», если кадры не идут
                 for _ in range(4):  # не более 4 кадров за опрос — GUI не «залипает»
                     try:
                         panel.show_frame(frame_q.get_nowait())
@@ -327,9 +498,17 @@ class App:
                         res = anpr_q.get_nowait()
                     except queue.Empty:
                         break
-                    allowed = self.book.contains(res.plate) if res.plate else False
-                    panel.show_anpr(res, allowed)
-                    self._log_anpr(res, allowed)
+                    allowed, mark, available = self._plate_verdict(res.plate, panel.name)
+                    panel.show_anpr(res, allowed, mark, available)
+                    self._log_anpr(res, allowed, mark, available)
+                if wl_q is not None:
+                    while True:
+                        try:
+                            _tag, cam_name, snap = wl_q.get_nowait()
+                        except queue.Empty:
+                            break
+                        self.camera_plates[cam_name] = snap
+                        self._refresh_side_list()
                 while True:
                     try:
                         _tag, source, kind, text = status_q.get_nowait()
@@ -342,16 +521,48 @@ class App:
             if not self._closing:
                 self.root.after(self.POLL_MS, self._poll)
 
-    def _log_anpr(self, res: ANPRResult, allowed: bool) -> None:
+    def _log_anpr(self, res: ANPRResult, allowed: bool, mark: str = "",
+                  available: bool = True) -> None:
         ts = datetime.fromtimestamp(res.ts).strftime("%Y-%m-%d %H:%M:%S")
         if res.plate:
-            mark = "ЕСТЬ в справочнике" if allowed else "НЕТ в справочнике"
-            self.side.log(f"[{res.camera_name}] номер {res.plate} — {mark}")
+            verdict = "разрешено" if allowed else "не разрешено"
+            self.log_panel.log(f"[{res.camera_name}] номер {res.plate} — {verdict}: {mark}")
             log_jsonl(self.log_file, {"ts": ts, "type": "anpr", "camera": res.camera_name,
                                       "plate": res.plate, "allowed": allowed,
+                                      "mark": mark, "db_available": available,
                                       "code": res.code, "fields": res.fields})
         else:
             log_jsonl(self.log_file, {"ts": ts, "type": "anpr_image", "camera": res.camera_name})
+
+    def _plate_verdict(self, plate: str, cam_name: str) -> Tuple[bool, str, bool]:
+        """Итог сверки номера (разрешён, метка, БД камеры доступна) — ТОЛЬКО ЧТЕНИЕ БД камеры."""
+        snap = self.camera_plates.get(cam_name)
+        cam_allow = cam_block = False
+        cam_available = False
+        reason = ""
+        if isinstance(snap, dict):
+            if snap.get("ok", True):
+                cam_available = True
+                pn = normalize_plate(plate)
+                cam_allow = pn in (snap.get("allow") or [])
+                cam_block = pn in (snap.get("block") or [])
+            else:
+                reason = str(snap.get("reason") or "")
+        allowed, mark = plate_decision(cam_allow, cam_block, cam_available=cam_available)
+        if not cam_available and reason:
+            mark = f"{mark} — {reason}"
+        return allowed, mark, cam_available
+
+    def _refresh_side_list(self) -> None:
+        """В правой панели — allow-номера первой доступной БД камеры (только чтение)."""
+        snap = next((s for s in self.camera_plates.values()
+                     if isinstance(s, dict) and s.get("ok", True)), None)
+        if snap is not None:
+            self.side.update_camera_list(sorted(snap.get("allow") or []))
+            return
+        reason = next((str(s.get("reason") or "") for s in self.camera_plates.values()
+                       if isinstance(s, dict) and s.get("reason")), "")
+        self.side.update_camera_list(None, reason)
 
     # --------------------------- действия ---------------------------
 
@@ -365,7 +576,7 @@ class App:
         panel = self.panels[index]
         plate = panel._last.plate if panel._last else ""
         panel.set_busy(True)
-        self.side.log(f"Отправка команды открытия ворот ({cam.name})…")
+        self.log_panel.log(f"Отправка команды открытия ворот ({cam.name})…")
 
         def work() -> None:
             ok, msg = cam.open_gate(plate_number=plate)
@@ -378,25 +589,11 @@ class App:
         cam = self.cameras[index]
         panel = self.panels[index]
         panel.set_busy(False)
-        self.side.log(f"{'✓ Ворота открыты' if ok else '✗ Ошибка открытия'} ({cam.name}): {msg}")
+        self.log_panel.log(f"{'✓ Ворота открыты' if ok else '✗ Ошибка открытия'} ({cam.name}): {msg}")
         log_jsonl(self.log_file, {
             "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "type": "gate_open", "camera": cam.name, "success": ok, "detail": msg,
             "plate": panel._last.plate if panel._last else ""})
-
-    def add_plate(self, plate: str, index: Optional[int]) -> None:
-        if self.book.add(plate):
-            self.side.refresh_book()
-            self.side.log(f"Добавлен номер: {plate}")
-            if index is not None and self.panels[index]._last:
-                self.panels[index].show_anpr(self.panels[index]._last, True)
-        else:
-            self.side.log(f"Номер уже есть в справочнике: {plate}")
-
-    def remove_plate(self, plate: str) -> None:
-        if self.book.remove(plate):
-            self.side.refresh_book()
-            self.side.log(f"Удалён номер: {plate}")
 
     def _on_close(self) -> None:
         self._closing = True

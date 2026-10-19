@@ -1,0 +1,1936 @@
+=== PAGE 173 ===
+ 
+General APIs 172 
+4.9 Event 
+4.9.1 [DataType] Event Handler 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+<EventName> 
+object/object[] 
+O 
+EventHandler configuration. 
+The specific type is determined 
+by the event name. If it is an 
+array, each element in the array 
+represents the configuration of 
+a channel 
+<EventName> can be： 
+Alarm 
+BlindDetct 
+LossDetect 
+MotionDetect 
+LoginFailureAlarm 
+NetAbort 
+… 
+ 
++EventHandler 
+object 
+O 
+linkage handler 
+ 
+++TimeSection 
+TimeSection[w
+d][ts] 
+O 
+It's an effective time period for 
+eventHanlder everyday. 
+wd (week day) range is [0—6] 
+(Sunday—Saturday) 
+ts (time section) range is [0-23], 
+it's index of time section table. 
+Format: 
+mask 
+hh:mm:ss-
+hh:mm:ss 
+Mask: {0,1}, hh: [0—24], mm: 
+[00—59], ss: [00—59] 
+Mask 0: this time section is not 
+used. 
+Mask 1: this time section is 
+used. 
+Example: 
+TimeSection[1][0]=1 12:00:00-
+18:00:00 
+Means 
+EventHandler 
+is 
+effective between 12:00:00 and 
+18:00:00 at Monday. 
+[["1 12:00:00-18:00:00", 
+"1 
+19:00:00-20:00:00"], 
+["1 
+12:00:00-18:00:00", 
+"1 
+19:00:00-20:00:00"], 
+["1 
+12:00:00-18:00:00", 
+"1 
+19:00:00-20:00:00"], 
+["1 
+12:00:00-18:00:00", 
+"1 
+19:00:00-20:00:00"], 
+["1 
+12:00:00-18:00:00", 
+"1 
+19:00:00-20:00:00"], 
+["1 
+12:00:00-18:00:00", 
+"1 
+19:00:00-20:00:00"], 
+["1 
+12:00:00-18:00:00", 
+"1 19:00:00-20:00:00"]] 
+++RecordEnable 
+bool 
+O 
+Enable/Disable record function. true 
+++RecordCloud
+Enable 
+bool 
+O 
+Enable/Disable record cloud 
+storage 
+true 
+++RecordChann
+els 
+int[] 
+O 
+record channel list 
+[0, 1, 2] 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 174 ===
+ 
+General APIs 173 
+++RecordLatch 
+int 
+O 
+Range is [10—300]. 
+Unit is seconds, indicates the 
+time to record after input alarm 
+is cleared. 
+10 
+++AlarmOutEna
+ble 
+bool 
+O 
+Enable/Disable 
+alarm 
+out 
+function. 
+true 
+++AlarmOutCha
+nnels 
+int[] 
+O 
+index starts from 0. Range is {0, 
+1}, 
+0 — do not output alarm at 
+alarm out channel 
+1 — output alarm at alarm out 
+channel 
+[1, 4] 
+++AlarmOutLatc
+h 
+int 
+O 
+Range is [10—300]. 
+Unit is seconds, indicates the 
+time to output alarm after input 
+alarm is cleared. 
+10 
+++ExAlarmOutE
+nable 
+bool 
+O 
+Enable/Disable extend alarm 
+out ability 
+true 
+++ExAlarmOutC
+hannels 
+int[] 
+O 
+extend alarm out channels 
+[2, 3] 
+++PtzLink 
+(char[], int)[] 
+O 
+The first dimension represents 
+the channel index. 
+The 
+second 
+dimension 
+represents actions and values. 
+It contains two elements. 
+The first is PTZ action linked 
+with events.  
+Range is {None, Preset, Tour, 
+Pattern} 
+The second is the parameter of 
+PtzLink[ch][0],  
+If PtzLink[ch]][0] is 
+Preset: this is preset point. 
+Tour: this is tour path number. 
+Pattern: this is pattern number. 
+[ 
+["Preset", 3], 
+["Tour", 4], 
+["Pattern", 1] 
+] 
+++PtzLinkEnable 
+bool 
+O 
+Enable/Disable PTZ link. 
+true 
+++SnapshotEna
+ble 
+bool 
+O 
+Enable/Disable 
+snapshot 
+function. 
+true 
+++SnapshotCha
+nnels 
+int[] 
+O 
+snapshot channel list 
+[2, 4] 
+SnapshotPeriod 
+int 
+O 
+Range is [0—255]. 
+Frames between snapshots. 
+0 means continuously snapshot 
+for every frame. 
+3 
+++SnapshotTime
+s 
+int 
+O 
+Range is [0—65535] 
+Snapshot times before stop, 0 
+means don't stop snapshot. 
+5 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 175 ===
+ 
+General APIs 174 
+++TipEnable 
+bool 
+O 
+Enable/Disable local message 
+box tip. 
+true 
+++MailEnable 
+bool 
+O 
+Enable/Disable mail send for 
+alarm. 
+true 
+++BeepEnable 
+bool 
+O 
+Enable/Disable beep. 
+true 
+++Dejitter 
+int 
+O 
+Range is [0—255]. 
+Alarm signal dejitter seconds. 
+Alarm signal change during this 
+period is ignored.  
+0 
+++Delay 
+uint 
+O 
+Range is [0—300]. 
+Delay seconds before setting 
+take effect. 
+30 
+++LightingLink 
+object 
+O 
+LightingLink 
+ 
++++Enable 
+bool 
+O 
+Enable/Disable LightingLink 
+true 
++++FilckerLightT
+ype 
+enumchar[32] 
+O 
+Filcker Light Type 
+range :"WhiteLight","RedBlueLi
+ght" 
+"WhiteLight" 
++++LightLinkTyp
+e 
+enumchar[32] 
+O 
+range:"Filcker","KeepLighting" 
+"Filcker" 
++++FilckerInteva
+lTime 
+float 
+O 
+Filcker Inteval Time  
+unit: 0.1s 
+5 
++++FilckerTimes 
+int 
+O 
+Filcker Times, default 5 
+5 
++++LightDuratio
+n 
+uint 
+O 
+Light Duration 
+unit: s 
+10 
++++WhiteLightTi
+meSection 
+char[][][] 
+O 
+time section 
+ 
++++LightBright 
+uint 
+O 
+brightness 
+50 
+TrigerHttp 
+object 
+O 
+linkage command 
+ 
++TrigerHttpCom
+mand 
+char[] 
+R 
+Uri of linkage command 
+"/cgi-
+bin/eventManager.cgi?" 
++TrigerHttpEnabl
+e 
+bool 
+R 
+enable linkage command 
+true 
++TrigerServerNa
+me 
+char[32] 
+R 
+linkage server name in [Config] 
+Triger Http User List 
+"server1" 
+ 
+Please refer to "4.2.1 Get and Set Configure" for configuration getting and setting. Specific examples 
+are as follows : 
+Get Config Request Example 
+http://10.0.0.8/cgi-bin/configManager.cgi?action=getConfig&name=MotionDetect[0].EventHandler 
+Get Config Response Example 
+table.MotionDetect[0].EventHandler.AlarmOut=1 
+table.MotionDetect[0].EventHandler.AlarmOutChannels[0]=0 
+table.MotionDetect[0].EventHandler.AlarmOutEnable=true 
+table.MotionDetect[0].EventHandler.AlarmOutLatch=10 
+table.MotionDetect[0].EventHandler.BeepEnable=false 
+table.MotionDetect[0].EventHandler.Dejitter=30 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 176 ===
+ 
+General APIs 175 
+table.MotionDetect[0].EventHandler.Delay=0 
+table.MotionDetect[0].EventHandler.ExAlarmOut=1 
+table.MotionDetect[0].EventHandler.ExAlarmOutChannels[0]=0 
+table.MotionDetect[0].EventHandler.ExAlarmOutEnable=true 
+table.MotionDetect[0].EventHandler.LightingLink.Enable=false 
+table.MotionDetect[0].EventHandler.LightingLink.FilckerIntevalTime=2 
+table.MotionDetect[0].EventHandler.LightingLink.FilckerLightType=WhiteLight 
+table.MotionDetect[0].EventHandler.LightingLink.FilckerTimes=5 
+table.MotionDetect[0].EventHandler.LightingLink.LightDuration=10 
+table.MotionDetect[0].EventHandler.LightingLink.LightLinkType=Filcker 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[0][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[0][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[0][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[0][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[0][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[0][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[1][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[1][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[1][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[1][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[1][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[1][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[2][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[2][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[2][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[2][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[2][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[2][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[3][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[3][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[3][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[3][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[3][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[3][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[4][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[4][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[4][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[4][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[4][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[4][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[5][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[5][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[5][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[5][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[5][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[5][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[6][0]=1 00:00:00-23:59:59 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 177 ===
+ 
+General APIs 176 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[6][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[6][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[6][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[6][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.LightingLink.WhiteLightTimeSection[6][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.MailEnable=false 
+table.MotionDetect[0].EventHandler.PtzLink[0][0]=None 
+table.MotionDetect[0].EventHandler.PtzLink[0][1]=0 
+table.MotionDetect[0].EventHandler.PtzLink[1][0]=None 
+table.MotionDetect[0].EventHandler.PtzLink[1][1]=0 
+table.MotionDetect[0].EventHandler.PtzLink[2][0]=None 
+table.MotionDetect[0].EventHandler.PtzLink[2][1]=0 
+table.MotionDetect[0].EventHandler.PtzLink[3][0]=None 
+table.MotionDetect[0].EventHandler.PtzLink[3][1]=0 
+table.MotionDetect[0].EventHandler.PtzLink[4][0]=None 
+table.MotionDetect[0].EventHandler.PtzLink[4][1]=0 
+table.MotionDetect[0].EventHandler.PtzLinkEnable=false 
+table.MotionDetect[0].EventHandler.Record=1 
+table.MotionDetect[0].EventHandler.RecordChannels[0]=0 
+table.MotionDetect[0].EventHandler.RecordEnable=true 
+table.MotionDetect[0].EventHandler.RecordLatch=10 
+table.MotionDetect[0].EventHandler.Snapshot=1 
+table.MotionDetect[0].EventHandler.SnapshotChannels[0]=0 
+table.MotionDetect[0].EventHandler.SnapshotEnable=true 
+table.MotionDetect[0].EventHandler.SnapshotPeriod=0 
+table.MotionDetect[0].EventHandler.SnapshotTimes=0 
+table.MotionDetect[0].EventHandler.TimeSection[0][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[0][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[0][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[0][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[0][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[0][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[1][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[1][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[1][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[1][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[1][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[1][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[2][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[2][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[2][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[2][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[2][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[2][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[3][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[3][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[3][2]=0 00:00:00-23:59:59 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 178 ===
+ 
+General APIs 177 
+table.MotionDetect[0].EventHandler.TimeSection[3][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[3][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[3][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[4][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[4][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[4][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[4][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[4][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[4][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[5][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[5][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[5][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[5][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[5][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[5][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[6][0]=1 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[6][1]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[6][2]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[6][3]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[6][4]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TimeSection[6][5]=0 00:00:00-23:59:59 
+table.MotionDetect[0].EventHandler.TipEnable=false 
+table.MotionDetect[0].EventHandler.Tour=0 
+table.MotionDetect[0].EventHandler.TourChannels[0]=0 
+table.MotionDetect[0].EventHandler.TourEnable=false 
+ 
+Set Config Request Example 
+http://192.168.1.108/cgi-
+bin/configManager.cgi?action=setConfig&Alarm[0].EventHandler.AlarmOutChannels[0]=1&Alarm[0].Eve
+ntHandler.AlarmOutEnable=true 
+Set Config Response Example 
+OK 
+ 
+4.9.2 [Config] Alarm Event 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Alarm 
+object[] 
+O 
+alarm configuration, array 
+alarm channel, starts from 0 
+ 
++Enable 
+bool 
+R 
+Enable/Disable alarm from a input 
+channel 
+false 
++EventHandle
+r 
+EventHand
+ler 
+O 
+Setting of EventHandler is described 
+in SetEventHandler 
+ 
++Name 
+char[] 
+O 
+Name of alarm input channel. 
+Door1 
++SensorType 
+char[] 
+O 
+Range is [NC, NO]. 
+NC: normal close 
+NC 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 179 ===
+General APIs 178 
+NO: normal open 
+Please refer to "4.2.1 Get and Set Configure" for configuration getting and setting. Specific examples 
+are as follows : 
+Get Config Request Example 
+http://10.0.0.8/cgi-bin/configManager.cgi?action=getConfig&name=Alarm 
+Get Config Response Example 
+table.Alarm[0].Enable=false 
+table.Alarm[0].EventHandler….(output of EventHandler is described in GetEventHandler) 
+table.Alarm[0].Name=Door1 
+table.Alarm[0].SensorType=NC 
+table.Alarm[1]…. 
+… 
+Set Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=setConfig&Alarm[0].Enable=true 
+Set Config Response Example 
+OK 
+4.9.3 [Config] Alarm Out 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+AlarmOut 
+object[] 
+O 
+alarm out configuration, array 
+alarm out channel, starts from 0 
++Name
+char[] 
+O 
+Alarm out port name. 
+Beep 
++Mode
+int 
+O 
+Range is {0, 1, 2} 
+0: automatically alarm 
+1: force alarm 
+2: close alarm 
+0 
+Please refer to “4.2.1 Get and Set Configure” for configuration getting and setting. Specific examples 
+are as follows : 
+Get Config Request Example 
+http://10.0.0.8/cgi-bin/configManager.cgi?action=getConfig&name=AlarmOut 
+Get Config Response Example 
+table.AlarmOut[0].Mode=0 
+table.AlarmOut[0].Name=Beep 
+… 
+Set Config Request Example 
+http://192.168.1.108/cgi-
+bin/configManager.cgi?action=setConfig&AlarmOut[0].Mode=0&AlarmOut[0].Name=port1 
+Set Config Response Example 
+OK 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 180 ===
+ 
+General APIs 179 
+ 
+4.9.4 Get Alarm Input Channels 
+Request URL 
+http://<server>/cgi-bin/alarm.cgi?action=getInSlots 
+Method 
+GET 
+Request Params ( none) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Request Example 
+http://192.168.1.108/cgi-bin/alarm.cgi?action=getInSlots 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+result 
+int 
+R 
+alarm in channel number 
+2 
+Response Example 
+result=2 
+ 
+4.9.5 Get Alarm Output Channels 
+Request URL 
+http://<server>/cgi-bin/alarm.cgi?action=getOutSlots 
+Method 
+GET 
+Request Params ( none) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Request Example 
+http://192.168.1.108/cgi-bin/alarm.cgi?action=getOutSlots 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+result 
+int 
+R 
+alarm output channel number. 
+1 
+Response Example 
+result=1 
+ 
+4.9.6 Get States of Alarm Input Channels 
+Request URL 
+http://<server>/cgi-bin/alarm.cgi?action=getInState 
+Method 
+GET 
+Request Params ( none) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Request Example 
+http://192.168.1.108/cgi-bin/alarm.cgi?action=getInState 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 181 ===
+ 
+General APIs 180 
+result 
+int 
+R 
+A bit in the response result indicates 
+a channel alarm states, result 3 
+means alarm channel 1 and channel 
+2 have alarm now. 
+3 
+Response Example 
+result=3 
+4.9.7 Get States of Alarm Output Channels 
+Request URL 
+http://<server>/cgi-bin/alarm.cgi?action=getOutState 
+Method 
+GET 
+Request Params ( none) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Request Example 
+http://192.168.1.108/cgi-bin/alarm.cgi?action=getOutState 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+result 
+int 
+R 
+A bit in the response result indicates 
+a channel, result 1 means alarm is 
+present. 
+1 
+Response Example 
+result=1 
+4.9.8 [Config] Video Blind Event 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+BlindDetect 
+object[] 
+O 
+video blind configuration, array 
+video channel, starts from 0 
+ 
++Enable 
+bool 
+R 
+Enable/Disable blind detect feature. 
+false 
++EventHandle
+r 
+EventHand
+ler 
+O 
+Setting of EventHandler is described 
+in SetEventHandler 
+ 
++Level 
+int 
+O 
+Range is [1—6]. 
+Sensitivity of blind detection. 
+1: lowest sensitivity. 
+6: highest sensitivity. 
+3 
+ 
+Please refer to “4.2.1 Get and Set Configure” for configuration getting and setting. Specific examples 
+are as follows : 
+Get Config Request Example 
+http://10.0.0.8/cgi-bin/configManager.cgi?action=getConfig&name=BlindDetect 
+Get Config Response Example 
+table.BlindDetect[0].Enable=false 
+table.BlindDetect[0].EventHandler….(output of EventHandler is described in GetEventHandler) 
+table.BlindDetect[0]. Level=3 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 182 ===
+ 
+General APIs 181 
+table.BlindDetect[1]…. 
+… 
+ 
+Set Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=setConfig&BlindDetect[0].Enable=true 
+Set Config Response Example 
+OK 
+ 
+4.9.9 [Config] Video Loss Event 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+LossDetect 
+object[] 
+O 
+video loss configuration, array 
+video channel, starts from 0 
+ 
++Enable 
+bool 
+R 
+Enable/Disable loss detect feature. 
+false 
++EventHandle
+r 
+EventHand
+ler 
+O 
+Setting of EventHandler is described 
+in SetEventHandler. 
+ 
+ 
+Please refer to “4.2.1 Get and Set Configure” for configuration getting and setting. Specific 
+examples are as follows : 
+Get Config Request Example 
+http://10.0.0.8/cgi-bin/configManager.cgi?action=getConfig&name=LossDetect 
+Get Config Response Example 
+table.LossDetect[0].Enable=false 
+table.LossDetect[0].EventHandler…(output of EventHandler is described in GetEventHandler) 
+table.LossDetect[1]…. 
+… 
+ 
+Set Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=setConfig&LossDetect[0].Enable=true 
+Set Config Response Example 
+OK 
+4.9.10 [Config] Login Failure Event 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+LoginFailureAl
+arm 
+object 
+O 
+login failure event config 
+ 
++Enable 
+bool 
+R 
+Enable/Disable to notify LoginFailure 
+event. Now this event can be linked with 
+send email and alarm out. The max try 
+login times can be configured in chapter 
+SetGeneralConfig. 
+false 
++EventHandle
+r 
+EventHand
+ler 
+O 
+Setting of EventHandler is described in 
+SetEventHandler. 
+ 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 183 ===
+ 
+General APIs 182 
+ 
+Please refer to “4.2.1 Get and Set Configure” for configuration getting and setting. Specific 
+examples are as follows : 
+Get Config Request Example 
+http://10.0.0.8/cgi-bin/configManager.cgi?action=getConfig&name=LossDetect 
+Get Config Response Example 
+table.LoginFailureAlarm.Enable=false 
+table.LoginFailureAlarm.EventHandler…(output of EventHandler is described in GetEventHandler) 
+ 
+Set Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=setConfig&LoginFailureAlarm.Enable=true 
+Set Config Response Example 
+OK 
+4.9.11 [Config] Storage Not Exist Event 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+StorageNotExi
+st 
+object 
+O 
+storage not exist event config 
+ 
++Enable 
+bool 
+R 
+Enable/Disable 
+false 
++EventHandle
+r 
+EventHand
+ler 
+O 
+Setting of EventHandler is described 
+in SetEventHandler. 
+ 
+ 
+Please refer to “4.2.1 Get and Set Configure” for configuration getting and setting. Specific examples 
+are as follows : 
+Get Config Request Example 
+http://10.0.0.8/cgi-bin/configManager.cgi?action=getConfig&name=StorageNotExist 
+Get Config Response Example 
+table.StorageNotExist.Enable=false 
+table.StorageNotExist.EventHandler…(output of EventHandler is described in GetEventHandler) 
+ 
+Set Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=setConfig&StorageNotExist.Enable=true 
+Set Config Response Example 
+OK 
+4.9.12 [Config] Storage Access Failure Event 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+StorageFailure object 
+O 
+storage access failure event config 
+ 
++Enable 
+bool 
+R 
+Enable/Disable to notify access 
+failure event 
+false 
++EventHandle
+r 
+EventHand
+ler 
+O 
+Setting of EventHandler is 
+described in SetEventHandler. 
+ 
+ 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 184 ===
+ 
+General APIs 183 
+Please refer to “4.2.1 Get and Set Configure” for configuration getting and setting. Specific 
+examples are as follows : 
+Get Config Request Example 
+http://10.0.0.8/cgi-bin/configManager.cgi?action=getConfig&name=StorageFailure 
+Get Config Response Example 
+table.StorageFailure.Enable=false 
+table.StorageFailure.EventHandler…(output of EventHandler is described in GetEventHandler) 
+ 
+Set Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=setConfig&StorageFailure.Enable=true 
+Set Config Response Example 
+OK 
+4.9.13 [Config] Storage Low Space Event 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+StorageLowSp
+ace 
+object 
+O 
+storage low space event config 
+ 
++Enable 
+bool 
+R 
+Enable/Disable to notify low space event 
+false 
++EventHandler 
+EventHan
+dler 
+O 
+Setting of EventHandler is described in 
+SetEventHandler. 
+ 
+ 
+Please refer to “4.2.1 Get and Set Configure” for configuration getting and setting. Specific 
+examples are as follows : 
+Get Config Request Example 
+http://10.0.0.8/cgi-bin/configManager.cgi?action=getConfig&name=StorageLowSpace 
+Get Config Response Example 
+table.StorageLowSpace.Enable=false 
+table.StorageLowSpace.EventHandler…(output of EventHandler is described in GetEventHandler) 
+ 
+Set Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=setConfig&StorageLowSpace.Enable=true 
+Set Config Response Example 
+OK 
+ 
+4.9.14 [Config] Net Abort Event 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+NetAbort 
+object 
+O 
+net abort event config 
+ 
++Enable 
+bool 
+R 
+Enable/Disable to notify net abort event false 
++EventHandler 
+EventHan
+dler 
+O 
+Setting of EventHandler is described in 
+SetEventHandler. 
+ 
+ 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 185 ===
+ 
+General APIs 184 
+Please refer to “4.2.1 Get and Set Configure” for configuration getting and setting. Specific examples 
+are as follows : 
+Get Config Request Example 
+http://10.0.0.8/cgi-bin/configManager.cgi?action=getConfig&name=NetAbort 
+Get Config Response Example 
+table.NetAbort.Enable=false 
+table.NetAbort.EventHandler…(output of EventHandler is described in GetEventHandler) 
+ 
+Set Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=setConfig&NetAbort.Enable=true 
+Set Config Response Example 
+OK 
+4.9.15 [Config] IP Conflict Event 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+IPConflict 
+object 
+O 
+IP conflict event config 
+ 
++Enable 
+bool 
+R 
+Enable/Disable to notify IP conflict event 
+false 
++EventHandler 
+EventHan
+dler 
+O 
+Setting of EventHandler is described in 
+SetEventHandler. 
+ 
++FilterEth 
+char[8][16] 
+O 
+net cards to be filtered 
+["eth0"] 
++SendArpWhe
+nConflict 
+bool 
+O 
+send ARP when IP conflict 
+default false 
+false 
+ 
+Please refer to “4.2.1 Get and Set Configure” for configuration getting and setting. Specific examples 
+are as follows : 
+Get Config Request Example 
+http://10.0.0.8/cgi-bin/configManager.cgi?action=getConfig&name=IPConflict 
+Get Config Response Example 
+table.IPConflict.Enable=false 
+table.IPConflict.EventHandler…(output of EventHandler is described in GetEventHandler) 
+table.IPConflict.FilterEth[0]=eth0 
+table.IPConflict.SendArpWhenConflict=false 
+ 
+Set Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=setConfig&IPConflict.Enable=true 
+Set Config Response Example 
+OK 
+4.9.16 Get Channels Event Happened 
+Get channels indexes that event of code eventCode happens. 
+Not all events support this command. Do not recommend to use it, use Attach command instead. 
+Request URL 
+http://<server>/cgi-bin/eventManager.cgi?action=getEventIndexes 
+Method 
+GET 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 186 ===
+ 
+General APIs 185 
+Request Params ( key=value format in url) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+code 
+char[] 
+R 
+eventCode includes: 
+VideoMotion:  motion detection event 
+VideoLoss:    video loss detection 
+event 
+VideoBlind:    video blind detection 
+event. 
+AlarmLocal:    alarm detection event. 
+StorageNotExist: storage not exist event. 
+StorageFailure: storage failure event. 
+StorageLowSpace: storage low space 
+event. 
+AlarmOutput: alarm output event. 
+AlarmLocal 
+Request Example 
+http://192.168.1.108/cgi-bin/eventManager.cgi?action=getEventIndexes&code=AlarmLocal 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+channels 
+int[] 
+O 
+The list of channels where the specified 
+event codes have occurred. The element 
+value is the channel number. 
+(This response means event happened 
+on channel 0, channel 2 and channel 3 
+while video channel index starts from 0) 
+[0, 2, 3] 
+Response Example 
+channels[0]=0 
+channels[1]=2 
+channels[2]=3 
+4.9.17 Subscribe to Event Message 
+Subscribe to event messages. For details on the event name and parameters, see the 
+corresponding [Event] sections. 
+Request URL 
+http://<server>/cgi-bin/eventManager.cgi?action=attach 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+codes 
+string 
+R 
+Event code, can be a list of event cod
+es or "All" to cover all event codes. 
+Here are some frequently used event c
+odes: 
+VideoMotion:  motion detection event 
+SmartMotionHuman: human smart motio
+n detection  
+[ AlarmLocal, VideoM
+otion, VideoLoss, Vid
+eoBlind, FaceDetectio
+n ] 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 187 ===
+ 
+General APIs 186 
+SmartMotionVehicle: Vehicle smart moti
+on detection 
+VideoLoss: video loss detection event 
+VideoBlind: video blind detection event. 
+AlarmLocal: alarm detection event. 
+StorageNotExist: storage not exist even
+t. 
+StorageFailure: storage failure event. 
+StorageLowSpace: storage low space e
+vent. 
+AlarmOutput: alarm output event. 
+AudioMutation: intensity change 
+AudioAnomaly: input abnormal 
+CrossLineDetection: tripwire event 
+CrossRegionDetection: intrusion event 
+LeftDetection: abandoned object detecti
+on 
+TakenAwayDetection: missing object det
+ection 
+VideoAbnormalDetection: scene change 
+event 
+FaceDetection: face detect event 
+VideoUnFocus: defocus detect event 
+WanderDetection: loitering detection eve
+nt 
+RioterDetection: People Gathering event 
+ParkingDetection: parking detection eve
+nt 
+MoveDetection: fast moving event 
+HeatImagingTemper: temperature alarm 
+event 
+CrowdDetection: crowd density overrun 
+event 
+FireWarning:  fire warning event 
+FireWarningInfo: fire warning specific da
+ta info 
+ObjectPlacementDetection: placement o
+bject detection 
+ObjectRemovalDetection: removal object
+ detection 
+AccessControl: Access control event 
+…… 
+keepalive 
+int 
+O 
+Client keep-alive. If this parameter exist
+s, the client will send keep-alive data t
+o the device at an interval in seconds; 
+the value range is [1–60]. 
+20 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 188 ===
+ 
+General APIs 187 
+The keep-alive data can be "keep alive
+" in the form of string. 
+Note: It is recommended to use the He
+artbeat parameter instead of the keepal
+ive parameter. 
+heartbeat 
+int 
+O 
+Server keep-alive; integer; Unit: s; 
+The value range is [1–60]. 
+For example, if the parameter exists in 
+the URL and the value is 5, the device
+ will send "heartbeat" to the client as a
+ keep-alive message. 
+Note: The keep-alive message must be
+ sent before the keepalive parameter e
+xpires. 
+5 
+Request Example 
+http://192.168.1.108/cgi-bin/eventManager.cgi?action=attach&codes=[AlarmLocal%2CVideoMotion%
+2CVideoLoss%2CVideoBlind%2CFaceDetection] 
+ 
+Response Params ( multipart , key=value format in body , Heartbeat in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Code 
+string 
+R 
+Event code 
+VideoBlind 
+action 
+string 
+R 
+Event action 
+Values: Start/Stop/pulse 
+Start 
+index 
+int 
+R 
+Number; meaningless sometimes. 
+0 
+data 
+object 
+O 
+Event data; json message body. 
+For detailed message bodies, see the 
+corresponding section. 
+““ 
+Response Example 
+HTTP/1.1 200 OK 
+Cache-Control: no-cache 
+Pragma: no-cache 
+Expires: Thu, 01 Dec 2099 16:00:00 GMT 
+Connection: close 
+Content-Type: multipart/x-mixed-replace; boundary=myboundary 
+ 
+--myboundary 
+Content-Type: text/plain 
+Content-Length: 39 
+ 
+Code=VideoMotion;action=Start;index=0 
+ 
+--myboundary 
+Content-Type: text/plain 
+Content-Length: 38 
+ 
+Code=FaceDetection;action=Start;index=0;data={ 
+  “Faces”: [ { “BoundingBox”:  [2992,136,6960,8192], 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 189 ===
+ 
+General APIs 188 
+       “Sex”: “Man”, 
+       “Age”: 40, 
+       “Feature”: [ “WearGlasses”, “Smile”], 
+       “Eye”: 2, 
+       “Mouth”: 1, 
+       “Mask”: 1, 
+       “Beard”: 2 
+    }, {…}, … ] 
+} 
+ 
+--myboundary 
+Content-Type: text/plain 
+Content-Length: 9 
+ 
+Heartbeat 
+ 
+--myboundary 
+…… 
+4.9.18 Get Capability of Event Management 
+Request URL 
+http://<server>/cgi-bin/eventManager.cgi?action=getCaps 
+Method 
+GET 
+Request Params ( none) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Request Example 
+http://192.168.1.108/cgi-bin/eventManager.cgi?action=getCaps 
+ 
+Response Params (key=value format in body) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+caps 
+object 
+O 
+capabilities 
+ 
++TimeSectionEna
+ble 
+bool 
+O 
+default false 
+false 
++RecordEnable 
+bool 
+O 
+default false 
+false 
++RecordCloudEna
+ble 
+bool 
+O 
+default false 
+false 
++AlarmOutEnable 
+bool 
+O 
+default false 
+false 
++PtzLinkEnable 
+bool 
+O 
+default false 
+false 
++SnapshotEnable 
+bool 
+O 
+enable snapshot 
+false 
++SnapshotCloudE
+nable 
+bool 
+O 
+default false； 
+false 
++SnapshotTimes 
+uint32[2] 
+O 
+The first element represents the 
+minimum value 
+The second element represents the 
+maximum value 
+If this option is not available, it 
+indicates no restrictions 
+[3, 10] 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 190 ===
+ 
+General APIs 189 
++MailEnable 
+bool 
+O 
+support Email 
+false 
++BeepEnable 
+bool 
+O 
+support beep 
+false 
++DejitterEnable 
+bool 
+O 
+support dejitter 
+false 
++TipEnable 
+bool 
+O 
+ 
+false 
++MonitorTourEnab
+le 
+bool 
+O 
+ 
+false 
++MMSEnable 
+bool 
+O 
+default true 
+false 
++SMSEnable 
+bool 
+O 
+default false 
+false 
++SupportAlarmBel
+l 
+bool 
+O 
+default false 
+false 
++SupportAccessC
+ontrol 
+bool 
+O 
+default false 
+false 
++SipCallEnable 
+bool 
+O 
+default false 
+false 
++SupportAlarmSer
+ver 
+bool 
+O 
+DVR supports this feature by 
+default; 
+IPC does not 
+false 
++SupportPtzLinkD
+elay 
+bool 
+O 
+default false 
+false 
++SupportPSTNAla
+rmServer 
+bool 
+O 
+default false 
+false 
++SupportICR 
+bool 
+O 
+default false 
+false 
++BeepTime 
+bool 
+O 
+default false 
+false 
++DejitterRange 
+object 
+O 
+Dejitter range 
+ 
+++Min 
+int 
+O 
+unit is second 
+0 
+++Max 
+int 
+O 
+unit is second 
+60 
++AlarmOutLatch 
+int[2] 
+O 
+Alarm output delay  
+[0,0] for not support 
+If this option is not available, use [1, 
+300] by default 
+[1, 300] 
++RecordLatch 
+int[2] 
+O 
+ 
+[0, 300] 
++VoiceEnable 
+bool 
+O 
+default false 
+true 
++VoiceLinkTimeR
+ange 
+int32[2] 
+O 
+The first element represents the 
+minimum value 
+The second element represents the 
+maximum value 
+[10, 30] 
++VoicePlayTimes
+Range 
+uint16[2] 
+O 
+The first element represents the 
+minimum value 
+The second element represents the 
+maximum value 
+[1, 10] 
++VoiceLinkFileOpt
+ional 
+bool 
+O 
+default true 
+true 
++LogEnable 
+bool 
+O 
+default false 
+true 
++SupportLightCon
+trol 
+bool 
+O 
+default false 
+false 
++LinkLightBrightR
+ange 
+int32[2] 
+O 
+Range of lighting linkage brightness 
+adjustment 
+[0,100] 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 191 ===
+ 
+General APIs 190 
+The first element represents the 
+minimum value 
+The second element represents the 
+maximum value 
+If this option is not available, it 
+indicates that brightness 
+adjustment is not supported 
++SupportVideoMa
+trix 
+bool 
+O 
+default false 
+false 
++LinkDetailCamer
+aEnable 
+bool 
+O 
+Does it support linkage with detail 
+camera 
+false 
++SupportHTTPUpl
+oad 
+object 
+O 
+Does it support reporting business 
+data to the server through the 
+HTTP protocol 
+ 
+++PictureHttpUplo
+adEnable 
+bool 
+O 
+Does it support reporting picture 
+data to the server through the 
+HTTP protocol 
+false 
+++EventHttpUploa
+dEnable 
+bool 
+O 
+Does it support reporting event 
+data to the server through the 
+HTTP protocol 
+false 
++SMSEnable 
+bool 
+O 
+whether support SMS 
+false 
++TrigerHttpEnable 
+bool 
+O 
+是否支持发送命令 
+默认为false 
+whether support send http request 
+default false 
+false 
+Response Example 
+caps.AlarmOutEnable=true 
+caps.BeepEnable=true 
+caps.DejitterEnable=true 
+caps.MMSEnable=true 
+caps.MailEnable=true 
+caps.MonitorTourEnable=true 
+caps.PtzLinkEnable=true 
+caps.RecordEnable=true 
+caps.SnapshotEnable=true 
+caps.TimeSectionEnable=true 
+caps.TipEnable=true 
+caps.RecordCloudEnable=true, 
+caps.SnapshotCloudEnable=false, 
+caps.SnapshotTimes[0]=3, 
+caps.SnapshotTimes[1]=10, 
+caps.SupportAlarmBell=false, 
+caps.SupportAccessControl=false, 
+caps.SipCallEnable=false, 
+caps.SupportAlarmServer=false, 
+caps.SupportPtzLinkDelay=false, 
+caps.SupportPSTNAlarmServer=false, 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 192 ===
+ 
+General APIs 191 
+caps.SupportICR=false, 
+caps.BeepTime=false, 
+caps.DejitterRange.Min=0, 
+caps.DejitterRange.Max=60 
+caps.AlarmOutLatch[0]=1, 
+caps.AlarmOutLatch[1]=300, 
+caps.RecordLatch[0]=0, 
+caps.RecordLatch[1]=300, 
+caps.VoiceEnable=true, 
+caps.VoiceLinkTimeRange[0]=10, 
+caps.VoiceLinkTimeRange[1]=30, 
+caps.VoicePlayTimesRange[0]=1, 
+caps.VoicePlayTimesRange[1]=10, 
+caps.VoiceLinkFileOptional=true, 
+caps.LogEnable=true, 
+caps.SupportLightControl=false, 
+caps.LinkLightBrightRange[0]=0, 
+caps.LinkLightBrightRange[1]=100, 
+caps.SupportVideoMatrix=false, 
+caps.LinkDetailCameraEnable=false, 
+caps.SupportDisableLinkage[0]=0 
+caps.SupportDisableLinkage[1]=0 
+caps.SupportDisableLinkage[2]=0 
+caps.SupportDisableLinkage[3]=0 
+caps.SupportHTTPUpload.PictureHttpUploadEnable=false 
+caps.SupportHTTPUpload.EventHttpUploadEnable=false 
+caps.TrigerHttpEnable=false 
+4.9.19 [Config] Net Alarm Event 
+Net alarm event configuration parameters: 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+NetAlarm 
+object[] 
+R 
+Network alarm; one-dimensional 
+array. 
+The array index represents the 
+corresponding channel which starts 
+from 0. 
+ 
++Enable 
+bool 
+O 
+Enable alarm input (bypass switch) 
+true 
++DefenceAreaTy
+pe 
+string 
+O 
+Type of the protection zone 
+enumchar[32]{ 
+"Intime": Real-time protection zone 
+"Delay": Time-delay protection zone 
+"Fullday": 24-hour protection zone 
+Get the capability set to judge the 
+protection zone type. 
+} 
+"Intime" 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 193 ===
+ 
+General APIs 192 
++DisableDelay 
+integer 
+O 
+Delay disarming time 
+Unit: s 
+Get the maximum delay time from 
+the capability set. 
+Effective when EnableAlways is 
+selected or when the EnableControl 
+is set to Normal. 
+Others: 
+Effective only when the protection 
+zone type is Delay. 
+30 
++EnableDelay 
+integer 
+O 
+Delay arming time 
+Unit: s 
+Get the maximum delay time from 
+the capability set. 
+Effective when the protection zone 
+type is Delay. 
+30 
++Name 
+string 
+O 
+Alarm Channel Name 
+"Door" 
++SensorType 
+string 
+O 
+The sensor is solid on or off. 
+enumchar[32]{ 
+"NC" 
+"NO" 
+} 
+"NC" 
++EventHandler 
+object 
+O 
+Alarm linkage 
+For 
+linkage 
+configurations, 
+see 
+SetEventHandler. 
+ 
+Please refer to "4.2.1 Get and Set Configure" for configuration getting and setting. Specific examples 
+are as follows : 
+Get Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=getConfig&name=NetAlarm 
+Get Config Response Example 
+table.NetAlarm[0].Enable=false 
+table.NetAlarm[0].Name=channel1 
+table.NetAlarm[0].SensorType=NO 
+table.NetAlarm[0].EventHandler= (output of EventHandler is described in GetEventHandler) 
+ 
+Set Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=setConfig&NetAlarm[0].Enable=true 
+Set Config Response Example 
+OK 
+4.9.20 Set Net Alarm State 
+Set the network alarm status. 
+Request URL 
+http://<server>/cgi-bin/netAlarm.cgi?action=setState 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 194 ===
+ 
+General APIs 193 
+Name 
+Type 
+R/O 
+Description 
+Sample 
+channel 
+int 
+R 
+Channel number; access control 
+number; starting from 1 
+1 
+alarm 
+bool 
+R 
+Alarm status; bool; 
+"true" means the alarm is enabled 
+true 
+name 
+string 
+O 
+Alarm name; string; less than 32 
+characters 
+101 
+trigger 
+string 
+O 
+Alarm triggering source; string; less 
+than 32 characters. For example, 
+Infrared, WaterSensor Manual and 
+more 
+Remote 
+desc 
+string 
+O 
+Alarm description; string; less than 
+128 characters 
+Zone8 
+Request Example 
+http://192.168.1.108/cgi-
+bin/netAlarm.cgi?action=setState&channel=1&alarm=true&name=somke&trigger=SmokingSensor&d
+esc=Zone8 
+ 
+Response Params ( OK in body ) 
+Response Example 
+OK 
+4.9.21 Get Supported Events 
+Get the event list which the device supports. 
+Request URL 
+http://<server>/cgi-bin/eventManager.cgi?action=getExposureEvents 
+Method 
+GET 
+Request Params ( none ) 
+Request Example 
+http://192.168.1.108/cgi-bin/eventManager.cgi?action=getExposureEvents 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Sample 
+events 
+string[] 
+R 
+Supported event list; one-
+dimensional array 
+[VideoMotion, 
+AlarmLocal, 
+FaceDetection, 
+VideoMotion,…] 
+Response Example 
+events[0]=VideoMotion 
+events[1]=AlarmLocal 
+events[2]=FaceDetection 
+events[3]=VideoMotion 
+… 
+ 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 195 ===
+ 
+General APIs 194 
+4.9.22 [Config] Triger Http User List 
+Cooperate with TrigerHttp in event linkage to obtain username and password. This configuration 
+requires a privacy processing process. 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+TrigerHttpUserList 
+object[] 
+R 
+user info of TrigerHttp 
+ 
++TrigerHttpName 
+char[] 
+R 
+user admin 
+"admin" 
++TrigerHttpPassword 
+char[] 
+R 
+password 
+"admin" 
++TrigerServerName 
+char[32] 
+R 
+linkage server name 
+"Server1" 
++TrigerServerIP 
+char[32] 
+R 
+linkage server ip address 
+"0.0.0.0" 
++TrigerServerPort 
+uint16 
+R 
+linkage server port 
+80 
++TrigerHttpsEnable 
+bool 
+R 
+https enable 
+false 
+ 
+Please refer to "4.2.1 Get and Set Configure" for configuration getting and setting. Specific examples 
+are as follows : 
+Get Config Request Example 
+http://10.0.0.8/cgi-bin/configManager.cgi?action=getConfig&name=TrigerHttpUserList 
+Get Config Response Example 
+table.TrigerHttpUserList[0].TrigerHttpName=admin 
+table.TrigerHttpUserList[0].TrigerHttpPassword=admin 
+table.TrigerHttpUserList[0].TrigerServerName=Server1 
+table.TrigerHttpUserList[0].TrigerServerIP=0.0.0.0 
+table.TrigerHttpUserList[0].TrigerServerPort=80 
+table.TrigerHttpUserList[0].TrigerHttpsEnable=false 
+table.TrigerHttpUserList[1].TrigerHttpName=admin 
+… 
+ 
+Set Config Request Example 
+http://10.0.0.8/cgi-
+bin/configManager.cgi?action=setConfig&TrigerHttpUserList[0].TrigerHttpName=admin&TrigerHttpUserL
+ist[0].TrigerHttpPassword=admin 
+Set Config Response Example 
+OK 
+ 
+4.10 Record 
+4.10.1 Get Capability of Recording 
+Request URL 
+http://<server>/cgi-bin/recordManager.cgi?action=getCaps 
+Method 
+GET 
+Request Params ( none) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Request Example 
+DAHUA_HTTP_API V3.52 for BITRU

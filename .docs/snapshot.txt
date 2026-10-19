@@ -1,0 +1,368 @@
+=== PAGE 65 ===
+ 
+General APIs 64 
+{ 
+  "Status" : "OK" 
+} 
+ 
+4.4 Snapshot 
+4.4.1 [Config] Snap 
+Snapshot configuration parameters: 
+Config Data Params 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Snap 
+object[] 
+R 
+One element for each channel, and the 
+array index represents the channel 
+number which starts from 0. 
+[80,50] 
++HolidayEnable 
+bool 
+O 
+Whether holiday setting is supported. 
+It is not supported by default. 
+false 
+TimeSection 
+char[8][24][
+32] 
+O 
+Configure the period of capturing 
+snapshots. 
+Two-dimensional array in strings. 
+The first dimension of the array is the 
+day of the week, and the range is [0–7] 
+(Sunday–Saturday). The last item is for 
+holiday. 
+The second dimension is the period 
+index. One day is divided into multiple 
+periods, and the range is [0–23]. 
+Each period is set as a string in the 
+format of:mask hh: mm: ss-hh: mm: ss 
+Mask: The range is [0–4294967295], 
+and each bit carries a special meaning. 
+See the description as follows: 
+hh: Hour; range: [0–24]  
+mm: Minute; range: [0–59]  
+ss: Description; ranges [0 to 59] 
+Mask: record type. 
+Meaning of each bit: 
+Bit0: Normal snapshot 
+Bit1: Motion detection snapshot 
+Bit2: Alarm snapshot 
+Bit3: Card-swiping snapshot 
+Bit6: POS snapshot 
+Bit4, Bit5, Bit7–Bit31: Reserved. 
+[ [ "6 00:00:00-
+23:59:59", "0 00:
+00:00-
+23:59:59","0 00:0
+0:00-
+23:59:59", "0 00:
+00:00-
+23:59:59", … ] ] 
+ 
+Please refer to "4.2.1 Get and Set Configure" for configuration getting and setting. Specific examples 
+are as follows : 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 66 ===
+ 
+General APIs 65 
+Get Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=getConfig&name=Snap 
+Get Config Response Example 
+table.Snap[0].HolidayEnable=true 
+table.Snap[0].TimeSection[0][0]=6 00:00:00-23:59:59 
+table.Snap[0].TimeSection[0][1]=0 00:00:00-23:59:59 
+… 
+table.Snap[1].HolidayEnable=false 
+table.Snap[1].TimeSection[0][1]=0 00:00:00-23:59:59 
+table.Snap[1].TimeSection[0][1]=0 00:00:00-23:59:59 
+… 
+ 
+Set Config Request Example 
+http://192.168.1.108/cgi-bin/configManager.cgi?action=setConfig&Snap[0].HolidayEnable=true&Snap
+[0].TimeSection[0][0]=6 00:00:00-23:59:59&Snap[0].TimeSection[0][1]=0 00:00:00-23:59:59&Snap
+[1].HolidayEnable=false&Snap[1].TimeSection[0][1]=0 00:00:00-23:59:59&Snap[1].TimeSection[0][1]
+=0 00:00:00-23:59:59 
+Set Config Response Example 
+OK 
+4.4.2 Get a Snapshot 
+Get snapshots of a specified video channel 
+Request URL 
+http://<server>/cgi-bin/snapshot.cgi 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+channel 
+int 
+O 
+Video channel number starting from 1, and 
+the default value is 1. 
+1 
+type 
+uint32 
+O 
+0: Acquire the snapshot from the front end 
+1: Represent capture of local real-time 
+video secondary decoding encoding 
+Default 0 
+0 
+Request Example 
+http://192.168.1.108/cgi-bin/snapshot.cgi?channel=1&type=0 
+ 
+Response Params ( binary in body ) 
+<binary data>: images in JPEG format 
+Response Example 
+HTTP/1.1 200 OK 
+Server: Device/1.0 
+Content-Type: image/jpeg 
+Content-Length:<image size> 
+ 
+<jpeg data> 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 67 ===
+ 
+General APIs 66 
+4.4.3 Subscribe to Snapshot 
+Subscribe to the events and event snapshots. For details on the event name and parameters, see 
+the corresponding [Event] sections. 
+Request URL 
+http://<server>/cgi-bin/snapManager.cgi?action=attachFileProc 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+channel 
+int 
+O 
+Video channel number, starting from 1. 
+If not specified, the default value is 1. 
+-1 means subscribing to all channels. 
+1 
+heartbeat 
+int 
+O 
+Heartbeat interval. 
+Unit: s 
+Range: [1–60], and the default value is 5. 
+While sending the events, the device 
+regularly sends a heartbeat message to 
+keep itself alive. 
+The message is a string named 
+"heartbeat". 
+5 
+Flags 
+char[][32] 
+R 
+Subscription parameter. 
+The value "Event" should be included. 
+"Event" 
+Events 
+char[][32] 
+R 
+The list of event codes 
+Select All to subscribe all events 
+Common event codes are as follows: 
+VideoMotion: Motion detection 
+VideoLoss: Video loss 
+VideoBlind: Video Tampering 
+AlarmLocal: Local alarms 
+TrafficJunction: ANPR 
+TrafficRetrograde: Wrong-way driving 
+TrafficParking: Illegal parking 
+TrafficJam: Traffic congestion 
+TrafficThrow: Throwing out of the vehicle 
+TrafficPedestrain: A pedestrian walks onto 
+a motor vehicle lane 
+TrafficParkingSpaceParking: A vehicle is in 
+the parking space 
+TrafficParkingSpaceNoParking: No vehicle 
+is in the parking space 
+TrafficParkingSpaceOverLine: A vehicle 
+crosses the line of a parking space 
+TrafficManualSnap: 
+Manual 
+snapshot 
+capturing 
+FaceRecognition: Face recognition 
+TrafficParkingStatistics: 
+Parking 
+space 
+counting 
+[ "VideoMotion" , 
+"TrafficJunction" ] 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 68 ===
+ 
+General APIs 67 
+AccessControl: Access control unlocking 
+… 
+Request Example 
+http://192.168.1.108/cgi-bin/snapManager.cgi?action=attachFileProc&channel=1&heartbeat=5&Flags
+[0]=Event&Events=[VideoMotion%2CVideoLoss] 
+ 
+Response Params ( multipart in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Events 
+object[] 
+R 
+Event detail array 
+ 
++EventBaseInfo 
+object 
+R 
+Shared basic information for all events 
+ 
+++Code 
+char[32] 
+R 
+Event code 
+See the description on Events 
+“”FaceRecognition“
+” 
+++Action 
+char[16] 
+R 
+Event action 
+Value: "Start", "Stop" and "Pulse" 
+"Pulse" 
+++Index 
+int 
+R 
+The channel number where the event 
+happens, starting from 0 
+0 
++Channel 
+int 
+O 
+The video channel number of the 
+generated picture, starting from 0. 
+0 
++… 
+… 
+… 
+Unique parameters of each event 
+For details on each event, see the 
+corresponding section. 
+ 
+Response Example 
+HTTP/1.1 200 OK 
+Server: Device/1.0 
+Content-Type: multipart/x-mixed-replace; boundary=<boundary> 
+Connection: closed 
+ 
+--<boundary> 
+Content-Type: text/plain 
+Content-Length: <data length> 
+ 
+Events[0].EventBaseInfo.Code=TrafficJunction 
+Events[0].EventBaseInfo.Action=Pulse 
+Events[0].EventBaseInfo.Index=0 
+Events[0].Channel=0 
+Events[0].CountInGroup=3 
+Events[0].IndexInGroup=1 
+Events[0].Lane=1 
+Events[0].PTS=42949485818.0 
+Events[0].TrafficCar.PlateNumber=ZZZ12345 
+Events[0].TrafficCar.DeviceAddress=XXXRoad 
+…… 
+Events[1].Channel=1 
+Events[1].EventBaseInfo.Code=TrafficJunction 
+Events[1].EventBaseInfo.Action=Pulse 
+Events[1].EventBaseInfo.Index=1 
+Events[1].CountInGroup=3 
+DAHUA_HTTP_API V3.52 for BITRU
+
+=== PAGE 69 ===
+ 
+General APIs 68 
+Events[1].IndexInGroup=2 
+Events[1].Lane=1 
+…… 
+--<boundary> 
+Content-Type: image/jpeg 
+Content-Length:<image size> 
+ 
+<JPEG image data> 
+--<boundary> 
+Content-Type: text/plain 
+Content-Length:<data length> 
+ 
+Heartbeat 
+--<boundary> 
+…… 
+4.5 Video Attributes 
+4.5.1 Get Max Extra Stream Numbers 
+Get the maximum number of sub streams 
+Request URL 
+http://<server>/cgi-bin/magicBox.cgi?action=getProductDefinition 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[] 
+R 
+Name 
+Fixed value: MaxExtraStream 
+"MaxExtraStream" 
+Request Example 
+http://192.168.1.108/cgi-bin/magicBox.cgi?action=getProductDefinition&name=MaxExtraStream 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+table 
+object 
+R 
+Return content 
+ 
++MaxExtraStream int 
+R 
+The maximum number of sub streams 
+Values: 1, 2 and 3. 
+1 
+Response Example 
+table.MaxExtraStream=1 
+4.5.2 Get Encode Capability 
+Get encoding capabilities. 
+Request URL 
+http://<server>/cgi-bin/encode.cgi?action=getCaps 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Request Example 
+DAHUA_HTTP_API V3.52 for BITRU

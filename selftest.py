@@ -1,7 +1,7 @@
 """Офлайн-проверки компонентов без реальной камеры (запуск: python selftest.py).
 
-Проверяются: нормализация номеров и справочник, multipart-парсер (MJPEG и
-attachFileProc с бинарями), извлечение номера из события, вписывание изображений.
+Проверяются: нормализация номеров и решение по БД камеры, multipart-парсер
+(MJPEG и attachFileProc с бинарями), извлечение номера из события, изображения.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import tempfile
 from PIL import Image
 
 import dahua_client as dc
-from config import PlateBook, normalize_plate
+from config import normalize_plate, plate_decision
 
 
 def _jpeg_bytes(w: int = 64, h: int = 32, color=(200, 30, 30)) -> bytes:
@@ -41,19 +41,32 @@ def test_normalize() -> None:
     print("OK normalize_plate")
 
 
-def test_plate_book() -> None:
-    with tempfile.TemporaryDirectory() as td:
-        path = os.path.join(td, "allowed_plates.json")
-        book = PlateBook(path)
-        assert book.add("а123вв77")
-        assert not book.add("А123ВВ 77")  # дубликат после нормализации
-        assert book.contains("a123bb77")  # найден в латинице
-        assert not book.contains("O123PP77")
-        assert book.remove("А123ВВ77")
-        assert not book.remove("X000XX00")
-        book2 = PlateBook(path)  # перечитывание с диска
-        assert book2.items() == []
-    print("OK PlateBook (add/contains/remove/reload)")
+def test_plate_decision() -> None:
+    """Решение по БД камеры: allow/block, недоступная БД — без ложного «НЕТ»."""
+    assert plate_decision(True, False, True) == (True, "ЕСТЬ в справочнике камеры")
+    assert plate_decision(False, True, True) == (False, "ЗАПРЕЩЁН (блок-лист камеры)")
+    assert plate_decision(False, False, True) == (False, "НЕТ в справочнике камеры")
+    ok, mark = plate_decision(False, False, cam_available=False)
+    assert not ok and mark == "справочник камеры недоступен"
+    print("OK plate_decision (только БД камеры, честная метка при недоступности)")
+
+
+def test_recordfinder_parsing() -> None:
+    """Разбор key=value ответа recordFinder.cgi (таблицы TrafficRedList/BlackList)."""
+    text = ("totalCount=3\r\nfound=3\r\n"
+            "records[0].PlateNumber=A250MX76\r\nrecords[0].RecNo=1\r\n"
+            "records[1].PlateNumber=с737хн777\r\nrecords[1].MasterOfCar=Козел 1\r\n"
+            "records[2].PlateNumber=001M0C01\r\n")
+    total, recs = dc.parse_recordfinder_records(text)
+    assert total == 3 and len(recs) == 3
+    assert recs[1]["PlateNumber"] == "с737хн777" and recs[1]["MasterOfCar"] == "Козел 1"
+    assert normalize_plate(recs[1]["PlateNumber"]) == "C737XH777"
+    assert "RecNo" not in recs[2]  # отсутствующие поля не выдумываем
+    total, recs = dc.parse_recordfinder_records("found=0\r\n")
+    assert total == 0 and recs == []
+    total, recs = dc.parse_recordfinder_records("")
+    assert total == 0 and recs == []
+    print("OK parse_recordfinder_records (таблицы справочника TrafficRedList/BlackList)")
 
 
 def test_mjpeg_parsing() -> None:
@@ -136,6 +149,22 @@ def test_images() -> None:
     print("OK fit_image / make_placeholder")
 
 
+def test_photo_size() -> None:
+    """Размер фото под видео: video.photo_scale (0.5 — вдвое, 1.0 — в размер видео)."""
+    import gui as gui_mod
+    assert gui_mod.photo_size(640, 360, 0.5) == (320, 180)
+    assert gui_mod.photo_size(640, 360, 1.0) == (640, 360)
+    assert gui_mod.photo_size(640, 360, 0.75) == (480, 270)
+    assert gui_mod.photo_size(100, 60, 0.25) == (25, 15)
+    assert gui_mod.normalize_photo_scale(0.75) == 0.75
+    assert gui_mod.normalize_photo_scale("0.75") == 0.75
+    assert gui_mod.normalize_photo_scale(None) == 0.5
+    assert gui_mod.normalize_photo_scale("мусор") == 0.5
+    assert gui_mod.normalize_photo_scale(5) == 1.0
+    assert gui_mod.normalize_photo_scale(-1) == 0.25
+    print("OK photo_size / normalize_photo_scale (video.photo_scale)")
+
+
 def test_config_roundtrip() -> None:
     from config import load_config, save_config, DEFAULT_CONFIG
     with tempfile.TemporaryDirectory() as td:
@@ -147,10 +176,63 @@ def test_config_roundtrip() -> None:
     print("OK load_config/save_config")
 
 
+def test_resolution_helpers() -> None:
+    """Хелперы разрешения потока: пресеты, форма ШxВ, имена конфиг-групп Dahua."""
+    assert dc.parse_resolution("720P") == (1280, 720)
+    assert dc.parse_resolution("1920x1080") == (1920, 1080)
+    assert dc.parse_resolution("960H") == (960, 576)
+    assert dc.parse_resolution("D1") == (704, 576)
+    assert dc.parse_resolution("1080P") == (1920, 1080)
+    assert dc.parse_resolution("Nonsense") is None
+    assert dc.encode_config_name(0) == ("MainFormat", 0)
+    assert dc.encode_config_name(1) == ("SubFormat", 0)
+    assert dc.encode_config_name(2) == ("SubFormat", 1)
+    assert dc.encode_config_name(99) == ("SubFormat", 0)
+    print("OK resolution helpers (parse_resolution / encode_config_name)")
+
+
+def test_snapshot_worker() -> None:
+    """VideoWorker в режиме снимков: кадр кладётся в очередь, воркер останавливается."""
+    import queue as _q
+    import time as _time
+    j = _jpeg_bytes(48, 27, (5, 5, 5))
+    calls = {"n": 0}
+
+    class FakeCam:
+        name = "fake"
+
+        def get_snapshot(self, timeout: float = 6.0):
+            calls["n"] += 1
+            return j if calls["n"] <= 3 else None
+
+    q: "_q.Queue" = _q.Queue(maxsize=2)
+    st: "_q.Queue" = _q.Queue(maxsize=20)
+    dc.stop_event.clear()
+    w = dc.VideoWorker(FakeCam(), q, st, mode="snapshot", interval=0.1)
+    w.start()
+    got = None
+    deadline = _time.time() + 5
+    while _time.time() < deadline:
+        try:
+            got = q.get(timeout=0.5)
+            break
+        except _q.Empty:
+            if not w.is_alive():
+                break
+    dc.stop_event.set()
+    w.join(timeout=3)
+    assert got == j, "кадр из режима снимков не получен"
+    assert not w.is_alive(), "воркер не остановился по stop_event"
+    print("OK VideoWorker snapshot mode (опрос снимков, остановка)")
+
+
 def main() -> int:
-    tests = [test_normalize, test_plate_book, test_mjpeg_parsing,
+    tests = [test_normalize, test_plate_decision, test_recordfinder_parsing,
+             test_mjpeg_parsing,
              test_mjpeg_parsing_no_length, test_anpr_stream_parsing,
-             test_extract_plate_variants, test_images, test_config_roundtrip]
+             test_extract_plate_variants, test_images, test_photo_size,
+             test_config_roundtrip,
+             test_resolution_helpers, test_snapshot_worker]
     failed = 0
     for t in tests:
         try:
