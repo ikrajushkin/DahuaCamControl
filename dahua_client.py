@@ -171,6 +171,85 @@ def extract_plate(ev: Dict[str, str]) -> str:
     return ""
 
 
+def event_image_sizes(ev: Dict[str, str]) -> Tuple[int, int, int]:
+    """Ожидаемые размеры снимка события: (полный блоб, сцена, кроп номера).
+
+    attachFileProc отдаёт снимок блобом [JPEG сцены][JPEG кропа номера] (иногда
+    двумя частями). Прошивки считают поля по-разному: у одних SceneImage.Length —
+    только сцена, у других — весь блоб; надёжны Object.Image.Offset/Length,
+    поэтому полный размер = Object.Image.Offset + Object.Image.Length.
+    """
+
+    def _int(key: str) -> int:
+        try:
+            return int(ev.get(key, "") or 0)
+        except ValueError:
+            return 0
+
+    scene_len = _int("SceneImage.Length")
+    obj_len = _int("Object.Image.Length")
+    obj_off = _int("Object.Image.Offset")
+    total = (obj_off + obj_len) if (obj_off or obj_len) else scene_len
+    scene = obj_off if obj_off else max(0, scene_len - obj_len)
+    return total, scene, obj_len
+
+
+class EventPhotoBinder:
+    """Привязка снимков attachFileProc к событиям: по размеру блоба, иначе FIFO.
+
+    Снимок события приходит отдельной частью и часто отстаёт от текста (иногда
+    идёт после текстов других событий). Привязка «снимок = последний текст» из-за
+    этого показывала фото предыдущего проезда; здесь снимок сверяется с ожидаемыми
+    размерами события (см. event_image_sizes). Кроп номера отдельной частью — не
+    фото события и отбрасывается.
+    """
+
+    def __init__(self) -> None:
+        self._pending: List[Tuple[int, Dict[str, str]]] = []
+        self._recent_obj: List[int] = []
+        self._seq = 0
+
+    def add_event(self, ev: Dict[str, str]) -> int:
+        """Зарегистрировать текстовое событие и вернуть его id (общий для текста и фото)."""
+        self._seq += 1
+        self._pending.append((self._seq, ev))
+        return self._seq
+
+    def feed_image(self, body: bytes) -> Optional[Tuple[int, Dict[str, str], bytes]]:
+        """Снимок -> (id_события, поля, фото); None — кроп номера (не фото);
+        (0, {}, body) — снимок без событий (диагностика в AnprWorker)."""
+        n = len(body)
+        for i, (seq, ev) in enumerate(self._pending):
+            total, scene, obj = event_image_sizes(ev)
+            if total and n in (total, scene):
+                if obj:
+                    self._remember_obj(obj)
+                del self._pending[i]
+                return seq, ev, body
+        if self._is_crop(n):
+            return None
+        if self._pending:
+            seq, ev = self._pending.pop(0)
+            _total, _scene, obj = event_image_sizes(ev)
+            if obj:
+                self._remember_obj(obj)
+            return seq, ev, body
+        return 0, {}, body
+
+    def _remember_obj(self, obj: int) -> None:
+        """Запомнить размер кропа привязанного события (кроп может прийти следом)."""
+        self._recent_obj.append(obj)
+        del self._recent_obj[:-8]
+
+    def _is_crop(self, n: int) -> bool:
+        """Размер кропа номера: у события в очереди или только что привязанного."""
+        for _seq, ev in self._pending:
+            _total, _scene, obj = event_image_sizes(ev)
+            if obj and n == obj:
+                return True
+        return n in self._recent_obj
+
+
 # ------------------- БД номеров камеры (VehicleRegisterDB) -------------------
 # Whitelist/blacklist камеры живут в VehicleRegisterDB: группы типов AllowListDB
 # и BlockListDB (разделы 10.7.1–10.7.10 HTTP API V3.52).
@@ -237,6 +316,7 @@ class ANPRResult:
     action: str = ""
     group_id: str = ""
     fields: Dict[str, str] = field(default_factory=dict)
+    event_id: int = 0  # общий id текста и снимка одного события (см. EventPhotoBinder)
 
     @property
     def plate_norm(self) -> str:
@@ -656,11 +736,13 @@ class DahuaCamera:
 
     def anpr_stream(self, events: List[str], heartbeat: float = 5.0,
                     read_timeout: float = 30.0
-                    ) -> Generator[Tuple[Dict[str, str], Optional[bytes]], None, None]:
+                    ) -> Generator[Tuple[int, Dict[str, str], Optional[bytes]], None, None]:
         """Подписка на события трафика: snapManager.cgi?action=attachFileProc (4.4.3 + 10.1).
 
-        Генерирует пары (поля_события, jpeg_или_None). Текстовые и бинарные части
-        идут вперемешку; снимок относится к последнему текстовому событию.
+        Генерирует тройки (id_события, поля_события, jpeg_или_None). Текстовые и
+        бинарные части идут вперемешку, снимок часто отстаёт от текста; привязка
+        по размеру блоба (EventPhotoBinder), а не «к последнему тексту». id=0 —
+        снимок без события, jpeg=None — текст (фото может прийти следующей частью).
         """
         params: Dict[str, Any] = {
             "action": "attachFileProc",
@@ -670,16 +752,16 @@ class DahuaCamera:
             "Events": "[" + ",".join(events) + "]",
         }
         stream = self._stream("/cgi-bin/snapManager.cgi", params, read_timeout=read_timeout)
-        pending: Dict[str, str] = {}
+        binder = EventPhotoBinder()
         for headers, body in stream.parts():
             ctype = headers.get("content-type", "")
             if ctype.startswith("text/"):
                 for ev in parse_event_text(body):
-                    pending = ev
-                    yield ev, None
-            elif ctype.startswith("image/"):
-                if body[:2] == b"\xff\xd8":
-                    yield dict(pending), body
+                    yield binder.add_event(ev), ev, None
+            elif ctype.startswith("image/") and body[:2] == b"\xff\xd8":
+                bound = binder.feed_image(body)
+                if bound is not None:
+                    yield bound
 
 
 # ----------------------- Фоновые потоки-воркеры -----------------------
@@ -877,43 +959,44 @@ class AnprWorker(_ReconnectWorker):
 
     def run(self) -> None:
         while not self.stop_evt.is_set():
-            pending_event: Optional[Dict[str, str]] = None
-            pending_ts = 0.0
+            ts_by_id: Dict[int, float] = {}
             try:
                 self._log(f"[{self.camera.name}] подписка на события: {','.join(self.events)}")
-                for ev, jpeg in self.camera.anpr_stream(
+                for ev_id, ev, jpeg in self.camera.anpr_stream(
                         self.events, heartbeat=self.heartbeat,
                         read_timeout=self.read_timeout):
                     self.attempt = 0
                     if jpeg is None:
-                        # Текстовая часть: событие с номером (фото может прийти следующей частью).
-                        pending_event = ev
-                        pending_ts = time.time()
+                        # Текстовая часть: событие с номером (фото может прийти позже,
+                        # иногда после текстов других событий — см. EventPhotoBinder).
+                        ts_by_id[ev_id] = time.time()
                         plate = extract_plate(ev)
                         if ENABLE_DEBUG and plate:
                             applog("anpr", f"[{self.camera.name}] событие: {ev}")
                         if plate:
                             put_latest(self.anpr_q, ANPRResult(
-                                self.camera.name, plate, None, pending_ts,
+                                self.camera.name, plate, None, ts_by_id[ev_id],
                                 code=ev.get("EventBaseInfo.Code", ""),
                                 action=ev.get("EventBaseInfo.Action", ""),
-                                group_id=ev.get("GroupID", ""), fields=ev))
+                                group_id=ev.get("GroupID", ""), fields=ev,
+                                event_id=ev_id))
                     else:
-                        # Бинарная часть: снимок относится к последнему текстовому событию.
-                        plate = extract_plate(pending_event or {})
+                        # Снимок своего события (привязка по размеру блоба, не «последнему тексту»).
+                        plate = extract_plate(ev)
+                        ts = ts_by_id.pop(ev_id, time.time()) if ev_id else time.time()
                         if plate:
                             put_latest(self.anpr_q, ANPRResult(
-                                self.camera.name, plate, jpeg, pending_ts,
-                                code=(pending_event or {}).get("EventBaseInfo.Code", ""),
-                                action=(pending_event or {}).get("EventBaseInfo.Action", ""),
-                                group_id=(pending_event or {}).get("GroupID", ""),
-                                fields=pending_event or {}))
+                                self.camera.name, plate, jpeg, ts,
+                                code=ev.get("EventBaseInfo.Code", ""),
+                                action=ev.get("EventBaseInfo.Action", ""),
+                                group_id=ev.get("GroupID", ""), fields=ev,
+                                event_id=ev_id))
                         else:
                             if ENABLE_DEBUG:
                                 applog("anpr", f"[{self.camera.name}] снимок без номера (пришлите debug.log для разбора)")
                             put_latest(self.anpr_q, ANPRResult(
                                 self.camera.name, "", jpeg, time.time(),
-                                fields=pending_event or {}))
+                                fields=ev, event_id=ev_id))
                 if self.stop_evt.is_set():
                     break
                 self._log(f"[{self.camera.name}] подписка закрыта камерой")

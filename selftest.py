@@ -132,6 +132,70 @@ def test_anpr_stream_parsing() -> None:
     print("OK ANPR-поток attachFileProc (текст + снимок + heartbeat)")
 
 
+def test_event_image_sizes() -> None:
+    """Размеры снимка события: прошивки считают SceneImage.Length по-разному."""
+    # камера 1 (9E0A…): SceneImage.Length — сцена, кроп идёт следом
+    assert dc.event_image_sizes({"SceneImage.Length": "150801", "Object.Image.Offset": "150801",
+                                 "Object.Image.Length": "5471"}) == (156272, 150801, 5471)
+    # камера 2 (ITC237…): SceneImage.Length — весь блоб, кроп внутри него
+    assert dc.event_image_sizes({"SceneImage.Length": "122741", "Object.Image.Offset": "120444",
+                                 "Object.Image.Length": "2297"}) == (122741, 120444, 2297)
+    assert dc.event_image_sizes({}) == (0, 0, 0)  # событие без полей снимка
+    assert dc.event_image_sizes({"SceneImage.Length": "5000"}) == (5000, 5000, 0)
+    print("OK event_image_sizes (поля Scene/Object прошивок камер)")
+
+
+def test_photo_binder_pairing() -> None:
+    """Снимок привязывается к СВОЕМУ событию по размеру блоба, даже когда тексты
+    нескольких событий шли подряд (иначе — фото предыдущего проезда)."""
+    ev_a = {"TrafficCar.PlateNumber": "A123BB77", "SceneImage.Length": "100",
+            "Object.Image.Offset": "90", "Object.Image.Length": "10"}
+    ev_b = {"TrafficCar.PlateNumber": "B456CC77", "SceneImage.Length": "200",
+            "Object.Image.Offset": "180", "Object.Image.Length": "20"}
+    b = dc.EventPhotoBinder()
+    id_a, id_b = b.add_event(ev_a), b.add_event(ev_b)
+    img_a, img_b = b"s" * 100, b"t" * 200
+    assert b.feed_image(img_b) == (id_b, ev_b, img_b)  # сначала пришло фото B — оно к B
+    assert b.feed_image(img_a) == (id_a, ev_a, img_a)
+    print("OK EventPhotoBinder (привязка снимка по размеру блоба)")
+
+
+def test_photo_binder_crop_skipped() -> None:
+    """Кроп номера отдельной частью — не фото события (иначе в панели растянутый номер)."""
+    ev = {"TrafficCar.PlateNumber": "A123BB77", "SceneImage.Length": "300",
+          "Object.Image.Offset": "250", "Object.Image.Length": "50"}
+    b = dc.EventPhotoBinder()
+    eid = b.add_event(ev)
+    assert b.feed_image(b"c" * 50) is None  # кроп пришёл раньше сцены
+    assert b.feed_image(b"s" * 300) == (eid, ev, b"s" * 300)
+    assert b.feed_image(b"c" * 50) is None  # кроп после сцены (память размеров)
+    print("OK EventPhotoBinder (кроп номера не считается фото)")
+
+
+def test_photo_binder_fifo_and_orphan() -> None:
+    """Без полей размеров — FIFO (старые прошивки); снимок без событий — с id=0."""
+    a = {"TrafficCar.PlateNumber": "A1"}
+    b = {"TrafficCar.PlateNumber": "B2"}
+    bd = dc.EventPhotoBinder()
+    ia, ib = bd.add_event(a), bd.add_event(b)
+    assert bd.feed_image(b"1" * 10) == (ia, a, b"1" * 10)
+    assert bd.feed_image(b"2" * 10) == (ib, b, b"2" * 10)
+    assert bd.feed_image(b"3" * 10) == (0, {}, b"3" * 10)
+    print("OK EventPhotoBinder (FIFO без размеров, снимок без события)")
+
+
+def test_anpr_display_action() -> None:
+    """Фото и номер в панели атомарны: старое фото не остаётся под новым номером."""
+    import gui as gui_mod
+    act = gui_mod.anpr_display_action
+    assert act(5, 5, False) == "wait"   # текст события 5: плейсхолдер до снимка
+    assert act(5, 5, True) == "photo"   # снимок события 5: показать
+    assert act(5, 4, True) == "skip"    # поздний снимок заменённого события 4
+    assert act(0, 7, True) == "skip"    # снимок без события: не трогать
+    assert act(0, 7, False) == "wait"
+    print("OK anpr_display_action (атомарность фото и номера в панели)")
+
+
 def test_extract_plate_variants() -> None:
     assert dc.extract_plate({"TrafficCar.PlateNumber": "A1"}) == "A1"
     assert dc.extract_plate({"PlateNumber": "B2"}) == "B2"
@@ -230,6 +294,9 @@ def main() -> int:
     tests = [test_normalize, test_plate_decision, test_recordfinder_parsing,
              test_mjpeg_parsing,
              test_mjpeg_parsing_no_length, test_anpr_stream_parsing,
+             test_event_image_sizes, test_photo_binder_pairing,
+             test_photo_binder_crop_skipped, test_photo_binder_fifo_and_orphan,
+             test_anpr_display_action,
              test_extract_plate_variants, test_images, test_photo_size,
              test_config_roundtrip,
              test_resolution_helpers, test_snapshot_worker]

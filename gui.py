@@ -65,8 +65,23 @@ def photo_size(vw: int, vh: int, scale: float) -> Tuple[int, int]:
     return max(1, round(vw * scale)), max(1, round(vh * scale))
 
 
+def anpr_display_action(shown_event_id: int, res_event_id: int, has_image: bool) -> str:
+    """Что делать с фото-панелью для результата ANPR: 'wait' | 'photo' | 'skip'.
+
+    «wait» — текст нового события: сразу плейсхолдер «снимок проезда…», чтобы под
+    новым номером никогда не осталось фото предыдущего авто; «photo» — снимок
+    текущего события, показать; «skip» — поздний снимок уже заменённого события
+    (или снимок без события) — не затирать актуальные данные.
+    """
+    if has_image:
+        return "photo" if res_event_id == shown_event_id else "skip"
+    return "wait"
+
+
 class CameraPanel(tk.Frame):
     """Панель одной камеры: видео, кнопка открытия ворот, фото авто + номер + метка."""
+
+    PHOTO_WAIT_S = 20.0  # через сколько секунд показать «снимок задерживается…»
 
     def __init__(self, master: tk.Misc, app: "App", cam_cfg: Dict[str, Any], index: int):
         super().__init__(master, bg=PANEL_BG, padx=10, pady=8)
@@ -77,6 +92,9 @@ class CameraPanel(tk.Frame):
         self._video_photo: Optional[ImageTk.PhotoImage] = None
         self._photo_photo: Optional[ImageTk.PhotoImage] = None
         self._last: Optional[ANPRResult] = None
+        # Атомарность «номер + фото»: id отображаемого события и время ожидания снимка.
+        self._shown_event_id = 0
+        self._photo_wait_ts = 0.0
         # Диагностика потока: реальное разрешение кадров и FPS прихода кадров.
         self._stream_size: Optional[Tuple[int, int]] = None
         self._fps_count = 0
@@ -183,6 +201,11 @@ class CameraPanel(tk.Frame):
 
     def tick_status(self) -> None:
         """Проверка «живости» потока (вызывается из GUI-опроса очередей)."""
+        if self._photo_wait_ts and time.time() - self._photo_wait_ts > self.PHOTO_WAIT_S:
+            # Снимок события задерживается — честно показываем это вместо молчания,
+            # старое фото под новым номером не возвращается.
+            self._photo_wait_ts = 0.0
+            self.show_photo_placeholder("снимок задерживается…")
         if not self._stream_size or self._last_frame_ts <= 0:
             return
         stale = (time.time() - self._last_frame_ts) > 5.0
@@ -199,9 +222,22 @@ class CameraPanel(tk.Frame):
 
     def show_anpr(self, res: ANPRResult, allowed: bool, mark: str = "",
                   available: bool = True) -> None:
-        """Отобразить результат распознавания: фото, номер и метку сверки с камерой."""
+        """Отобразить результат распознавания: фото, номер и метку сверки с камерой.
+
+        Номер и фото атомарны (см. anpr_display_action): под новым номером никогда
+        не остаётся фото предыдущего проезда, поздний снимок уже заменённого
+        события не затирает актуальные данные.
+        """
+        action = anpr_display_action(self._shown_event_id, res.event_id, bool(res.image))
+        if action == "skip":
+            return
         self._last = res
-        if res.image:
+        if action == "wait":
+            self._shown_event_id = res.event_id
+            self._photo_wait_ts = time.time()
+            self.show_photo_placeholder("снимок проезда…")
+        else:  # photo: снимок именно текущего отображаемого события
+            self._photo_wait_ts = 0.0
             try:
                 img = Image.open(io.BytesIO(res.image))
                 self._set_image(self.lbl_photo, fit_image(img, PHOTO_W, PHOTO_H), "_photo_photo")
@@ -223,6 +259,9 @@ class CameraPanel(tk.Frame):
             parts.append(res.action)
         if res.group_id:
             parts.append(f"группа {res.group_id}")
+        if action == "photo" and res.ts > 0:
+            # Диагностика: насколько снимок отстал от текста события.
+            parts.append(f"снимок +{max(0.0, time.time() - res.ts):.1f}с")
         self.lbl_meta.config(text="  ·  ".join(parts))
 
     def _on_open(self) -> None:
@@ -527,7 +566,9 @@ class App:
         if res.plate:
             verdict = "разрешено" if allowed else "не разрешено"
             self.log_panel.log(f"[{res.camera_name}] номер {res.plate} — {verdict}: {mark}")
-            log_jsonl(self.log_file, {"ts": ts, "type": "anpr", "camera": res.camera_name,
+            log_jsonl(self.log_file, {"ts": ts, "type": "anpr",
+                                      "kind": "photo" if res.image else "text",
+                                      "camera": res.camera_name,
                                       "plate": res.plate, "allowed": allowed,
                                       "mark": mark, "db_available": available,
                                       "code": res.code, "fields": res.fields})
