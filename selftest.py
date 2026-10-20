@@ -93,6 +93,45 @@ def test_mjpeg_parsing_no_length() -> None:
     print("OK MultipartStream (части без Content-Length)")
 
 
+class FakeRaw:
+    """Заглушка urllib3.HTTPResponse: отдаёт данные мелкими кусками через read1."""
+
+    def __init__(self, data: bytes, step: int = 7):
+        self._data = data
+        self._pos = 0
+        self._step = step
+
+    def read1(self, n: int) -> bytes:
+        chunk = self._data[self._pos:self._pos + self._step]
+        self._pos += self._step
+        return chunk
+
+
+class FakeRespRaw:
+    """Заглушка requests.Response с raw.read1 (штатный путь чтения живого потока)."""
+
+    def __init__(self, data: bytes, ctype: str):
+        self.headers = {"Content-Type": ctype}
+        self.raw = FakeRaw(data)
+
+
+def test_stream_read1_small_chunks() -> None:
+    """Живой поток через raw.read1: части читаются без требования «полного буфера»."""
+    txt = b"Events[0].TrafficCar.PlateNumber=A123BB77\r\n"
+    j = _jpeg_bytes(48, 24, (40, 40, 220))
+    data = (b"--b\r\nContent-Type: text/plain\r\nContent-Length: " + str(len(txt)).encode()
+            + b"\r\n\r\n" + txt + b"\r\n"
+            + b"--b\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(j)).encode()
+            + b"\r\n\r\n" + j + b"\r\n"
+            + b"--b\r\nContent-Type: text/plain\r\nContent-Length: 9\r\n\r\nHeartbeat\r\n"
+            + b"--b--\r\n")
+    stream = dc.MultipartStream(FakeRespRaw(data, "multipart/x-mixed-replace; boundary=b"))
+    parts = list(stream.parts())
+    assert len(parts) == 3, f"ожидалось 3 части, получено {len(parts)}"
+    assert parts[0][1] == txt and parts[1][1] == j and parts[2][1] == b"Heartbeat"
+    print("OK MultipartStream (raw.read1 мелкими кусками: без буферизации «до полного блока»)")
+
+
 def test_anpr_stream_parsing() -> None:
     """Сценарий attachFileProc: текст события -> снимок -> heartbeat -> снимок."""
     j = _jpeg_bytes(80, 40, (30, 30, 200))
@@ -293,7 +332,8 @@ def test_snapshot_worker() -> None:
 def main() -> int:
     tests = [test_normalize, test_plate_decision, test_recordfinder_parsing,
              test_mjpeg_parsing,
-             test_mjpeg_parsing_no_length, test_anpr_stream_parsing,
+             test_mjpeg_parsing_no_length, test_stream_read1_small_chunks,
+             test_anpr_stream_parsing,
              test_event_image_sizes, test_photo_binder_pairing,
              test_photo_binder_crop_skipped, test_photo_binder_fifo_and_orphan,
              test_anpr_display_action,

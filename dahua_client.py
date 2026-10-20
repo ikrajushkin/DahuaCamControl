@@ -52,7 +52,12 @@ class MultipartStream:
             raise ValueError(f"boundary не найден в Content-Type: {ctype!r}")
         bnd = m.group(1).encode("latin-1")
         self.delim = bnd if bnd.startswith(b"--") else b"--" + bnd
-        self._it = resp.iter_content(self.CHUNK)
+        # read1 («сколько есть, столько и вернуть»), а НЕ iter_content/read(n):
+        # блокирующее чтение «до полного буфера» копит живой поток (heartbeat,
+        # тексты событий) и отдаёт его пачками с задержкой до нескольких минут.
+        raw = getattr(resp, "raw", None)
+        self._raw = raw if (raw is not None and hasattr(raw, "read1")) else None
+        self._it = None if self._raw is not None else resp.iter_content(self.CHUNK)
         self._buf = bytearray()
         self._eof = False
 
@@ -60,12 +65,15 @@ class MultipartStream:
         if self._eof:
             return False
         try:
-            chunk = next(self._it)
+            chunk = self._raw.read1(self.CHUNK) if self._raw is not None \
+                else next(self._it)
         except StopIteration:
             self._eof = True
             return False
-        if chunk:
-            self._buf += chunk
+        if not chunk:
+            self._eof = True
+            return False
+        self._buf += chunk
         return True
 
     def read_line(self, limit: int = 65536) -> bytes:
