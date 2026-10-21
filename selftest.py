@@ -223,6 +223,23 @@ def test_photo_binder_fifo_and_orphan() -> None:
     print("OK EventPhotoBinder (FIFO без размеров, снимок без события)")
 
 
+def test_search_filter() -> None:
+    """Поиск по номерам и истории: вхождение в текст, фильтр со 2-го символа."""
+    import gui as gui_mod
+    items = ["A123BB77", "C737XH777", "X999YY197",
+             "15:01:02  [Камера 1] номер A123BB77 — разрешено"]
+    f = gui_mod.search_filter
+    assert f("", items) == items            # пустой запрос — без фильтра
+    assert f("   ", items) == items         # пробелы — тоже без фильтра
+    assert f("A", items) == items           # 1 символ — фильтра ещё нет
+    assert f("123", items) == [items[0], items[3]]
+    assert f("а123", items) == [items[0], items[3]]  # кириллица/раскладка
+    assert f("77", items) == [items[0], items[1], items[3]]
+    assert f("РАЗРЕШ", items) == [items[3]]          # без учёта регистра
+    assert f("нет такого", items) == []
+    print("OK search_filter (поиск по справочнику и истории, со 2-го символа)")
+
+
 def test_anpr_display_action() -> None:
     """Фото и номер в панели атомарны: старое фото не остаётся под новым номером."""
     import gui as gui_mod
@@ -336,6 +353,7 @@ def main() -> int:
              test_anpr_stream_parsing,
              test_event_image_sizes, test_photo_binder_pairing,
              test_photo_binder_crop_skipped, test_photo_binder_fifo_and_orphan,
+             test_search_filter,
              test_anpr_display_action,
              test_extract_plate_variants, test_images, test_photo_size,
              test_config_roundtrip,

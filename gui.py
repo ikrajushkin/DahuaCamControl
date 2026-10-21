@@ -78,6 +78,30 @@ def anpr_display_action(shown_event_id: int, res_event_id: int, has_image: bool)
     return "wait"
 
 
+SEARCH_MIN_CHARS = 2  # фильтрация поиска — со 2-го символа запроса
+SEARCH_HINT = "поиск…"
+
+
+def search_filter(query: str, items: List[str]) -> List[str]:
+    """Отфильтровать строки по вхождению запроса в текст (без учёта регистра).
+
+    Фильтрация начинается со 2-го символа: пустой запрос, пробелы или один
+    символ — показаны все строки. Дополнительно учитывается «нормализованный»
+    запрос (кириллица/раскладка в номере): «а123» находит «A123BB77».
+    """
+    q = (query or "").strip()
+    if len(q) < SEARCH_MIN_CHARS:
+        return list(items)
+    qq = q.casefold()
+    nq = normalize_plate(q).casefold()
+    out: List[str] = []
+    for s in items:
+        t = (s or "").casefold()
+        if qq in t or (nq and nq in t):
+            out.append(s)
+    return out
+
+
 class CameraPanel(tk.Frame):
     """Панель одной камеры: видео, кнопка открытия ворот, фото авто + номер + метка."""
 
@@ -277,8 +301,42 @@ class CameraPanel(tk.Frame):
         label.config(image=photo, width=photo.width(), height=photo.height())
 
 
+class SearchEntry(tk.Entry):
+    """Строка поиска с подсказкой «поиск…»; колбэк — при каждом изменении текста."""
+
+    def __init__(self, master: tk.Misc, on_change, **kw):
+        self._var = tk.StringVar()
+        super().__init__(master, textvariable=self._var, bg=ENTRY_BG, fg=MUTED,
+                         relief="flat", font=F_LOG, insertbackground=FG, **kw)
+        self._hint = SEARCH_HINT
+        self._on_change = on_change
+        self._var.set(self._hint)
+        self._var.trace_add("write", lambda *_: self.after_idle(self._fire))
+        self.bind("<FocusIn>", self._focus_in)
+        self.bind("<FocusOut>", self._focus_out)
+
+    def query(self) -> str:
+        """Текущий запрос (подсказка и пробелы вокруг — это пустой запрос)."""
+        text = self._var.get()
+        return "" if text == self._hint else text.strip()
+
+    def _fire(self) -> None:
+        if self.winfo_exists():
+            self._on_change()
+
+    def _focus_in(self, _event=None) -> None:
+        if self._var.get() == self._hint:
+            self._var.set("")
+            self.config(fg=FG)
+
+    def _focus_out(self, _event=None) -> None:
+        if not self._var.get().strip():
+            self._var.set(self._hint)
+            self.config(fg=MUTED)
+
+
 class SidePanel(tk.Frame):
-    """Правая колонка: справочник номеров камер (ТОЛЬКО ЧТЕНИЕ).
+    """Правая колонка: справочник номеров камер (ТОЛЬКО ЧТЕНИЕ) с поиском.
     Ширина — чуть больше максимальной длины номера (PLATE_MAX_CHARS + 2 знака)."""
 
     LIST_CHARS = PLATE_MAX_CHARS + 2  # ширина списка в знаках — «чуть больше» номера
@@ -286,6 +344,8 @@ class SidePanel(tk.Frame):
     def __init__(self, master: tk.Misc, app: "App"):
         super().__init__(master, bg=PANEL_BG, padx=10, pady=8)
         self.app = app
+        self._plates: Optional[List[str]] = None  # None — БД камер недоступна
+        self._reason = ""
 
         self.lst = tk.Listbox(self, bg=ENTRY_BG, fg=FG, selectbackground=ACCENT,
                               relief="flat", font=("Consolas", 11), height=8,
@@ -300,41 +360,68 @@ class SidePanel(tk.Frame):
         self.lbl_count = tk.Label(self, text="синхронизация…", bg=PANEL_BG, fg=MUTED,
                                   font=F_SMALL, justify="left", anchor="w", wraplength=w)
         self.lbl_count.pack(anchor="w")
-        self.lst.pack(fill="both", expand=True, pady=(6, 0))
+        # Поиск по номеру: вхождение в текст, фильтрация со 2-го символа.
+        self.search = SearchEntry(self, self._apply_filter, width=self.LIST_CHARS)
+        self.search.pack(anchor="w", pady=(6, 0))
+        self.lst.pack(fill="both", expand=True, pady=(4, 0))
 
     def update_camera_list(self, plates: Optional[List[str]], reason: str = "") -> None:
         """Показать allow-номера БД камер (ТОЛЬКО ЧТЕНИЕ). None — БД недоступна (reason — почему)."""
+        self._plates = list(plates) if plates is not None else None
+        self._reason = reason
+        self._apply_filter()
+
+    def _apply_filter(self) -> None:
+        """Перерисовать список: все номера или только вхождения поискового запроса."""
         self.lst.delete(0, "end")
-        if plates is None:
+        if self._plates is None:
             text = "недоступен"
-            if reason:
-                text += f": {reason}"
+            if self._reason:
+                text += f": {self._reason}"
             self.lbl_count.config(text=text, fg=RED)
             return
-        self.lbl_count.config(text=f"{len(plates)} шт. (только чтение)", fg=MUTED)
-        for p in plates:
+        shown = search_filter(self.search.query(), self._plates)
+        for p in shown:
             self.lst.insert("end", p)
+        if len(shown) == len(self._plates):
+            self.lbl_count.config(text=f"{len(self._plates)} шт. (только чтение)", fg=MUTED)
+        else:
+            self.lbl_count.config(text=f"найдено {len(shown)} из {len(self._plates)}", fg=FG)
 
 
 class LogPanel(tk.Frame):
-    """Нижняя строка раскладки: журнал событий под панелями камер (видео + фото)."""
+    """Нижняя строка раскладки: журнал событий под панелями камер (видео + фото).
+
+    История распознавания и все события — в этом журнале; над ним поиск:
+    вхождение в текст строки, фильтрация со 2-го символа.
+    """
 
     def __init__(self, master: tk.Misc, app: "App"):
         super().__init__(master, bg=PANEL_BG, padx=10, pady=8)
         self.app = app
+        self._lines: List[str] = []  # буфер строк (для фильтрации поиском)
         tk.Label(self, text="Журнал", bg=PANEL_BG, fg=FG, font=F_TITLE).pack(anchor="w")
+        self.search = SearchEntry(self, self._apply_filter, width=28)
+        self.search.pack(anchor="w", pady=(6, 0))
         self.txt = tk.Text(self, bg=ENTRY_BG, fg="#c8c8c8", relief="flat",
                            font=F_LOG, height=10, wrap="word", state="disabled")
-        self.txt.pack(fill="both", expand=True, pady=(6, 0))
+        self.txt.pack(fill="both", expand=True, pady=(4, 0))
 
     def log(self, text: str) -> None:
         """Добавить строку в журнал (буфер ограничен последними 400 строк)."""
         line = datetime.now().strftime("%H:%M:%S") + "  " + text
+        self._lines.append(line)
+        if len(self._lines) > 400:
+            del self._lines[:200]
+        self._apply_filter()
+
+    def _apply_filter(self) -> None:
+        """Показать журнал целиком или только строки с вхождением запроса."""
+        shown = search_filter(self.search.query(), self._lines)
         self.txt.config(state="normal")
-        self.txt.insert("end", line + "\n")
-        # ограничиваем журнал последними 400 строками
-        if int(self.txt.index("end-1c").split(".")[0]) > 400:
-            self.txt.delete("1.0", "200.0")
+        self.txt.delete("1.0", "end")
+        if shown:
+            self.txt.insert("end", "\n".join(shown) + "\n")
         self.txt.see("end")
         self.txt.config(state="disabled")
 
