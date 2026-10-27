@@ -346,6 +346,92 @@ def test_snapshot_worker() -> None:
     print("OK VideoWorker snapshot mode (опрос снимков, остановка)")
 
 
+def test_pass_input_validation() -> None:
+    """Валидация ввода пропуска: номер нормализуется, владелец — до 15 байт UTF-8."""
+    ok, plate, owner, err = dc.validate_pass_input("  а123вв77 ", "  Козел  ")
+    assert ok and plate == "A123BB77" and owner == "Козел" and err == ""
+    ok, _p, _o, err = dc.validate_pass_input("", "x")
+    assert not ok and err  # пустой номер
+    ok, plate, owner, err = dc.validate_pass_input("A1", "")
+    assert ok and plate == "A1" and owner == ""  # владелец не обязателен
+    ok, _p, _o, err = dc.validate_pass_input("A" * 17, "")
+    assert not ok and "16" in err  # номер длиннее 16 знаков
+    ok, _p, _o, err = dc.validate_pass_input("A1", "Camera control")
+    assert ok  # 14 байт — влезает
+    ok, _p, _o, err = dc.validate_pass_input("A1", "Camera control 1")
+    assert not ok and "15" in err  # 16 байт — камера не примет
+    ok, _p, _o, err = dc.validate_pass_input("A1", "Козел Козел")
+    assert not ok  # 21 байт UTF-8 — слишком длинно
+    ok, _p, owner, _e = dc.validate_pass_input("A1", "Козел 1")
+    assert ok and owner == "Козел 1"  # 12 байт — влезает
+    print("OK validate_pass_input (номер + владелец до 15 байт UTF-8)")
+
+
+def test_pass_write_variants() -> None:
+    """Варианты параметров recordUpdater.cgi: ITC-формат (основной) и документационный."""
+    v = dc.build_pass_write_variants("create", "A123BB77", "Camera control",
+                                     "2026-10-27 08:00:00", "2026-10-27 23:59:59")
+    assert v[0] == {"action": "insert", "name": "TrafficRedList",
+                    "PlateNumber": "A123BB77", "MasterOfCar": "Camera control",
+                    "BeginTime": "2026-10-27 08:00:00",
+                    "CancelTime": "2026-10-27 23:59:59"}
+    assert v[1]["action"] == "create" and v[1]["table.PlateNumber"] == "A123BB77"
+    assert v[1]["table.BeginTime"] == "2026-10-27 08:00:00"
+    assert v[1]["table.CancelTime"] == "2026-10-27 23:59:59"
+    v = dc.build_pass_write_variants("create", "A1", "")
+    assert "MasterOfCar" not in v[0]  # пустой владелец при добавлении не шлём
+    assert "BeginTime" not in v[0] and "CancelTime" not in v[0]  # без периода — не шлём
+    v = dc.build_pass_write_variants("update", "A1", "", "2026-01-01 00:00:00",
+                                     "2037-12-31 23:59:59", rec_no=7453)
+    assert v[0]["RecNo"] == "7453" and v[0]["MasterOfCar"] == ""  # пустой владелец — очистить
+    assert v[0]["BeginTime"] == "2026-01-01 00:00:00"
+    assert v[0]["CancelTime"] == "2037-12-31 23:59:59"
+    assert v[1]["table.RecNo"] == "7453"
+    v = dc.build_pass_write_variants("remove", rec_no=9)
+    assert v[0] == {"action": "remove", "name": "TrafficRedList", "RecNo": "9"}
+    assert v[1]["table.RecNo"] == "9"
+    try:
+        dc.build_pass_write_variants("delete")
+        assert False, "неизвестная операция должна быть отвергнута"
+    except ValueError:
+        pass
+    print("OK build_pass_write_variants (ITC и документационный форматы, период действия)")
+
+
+def test_pass_period_validation() -> None:
+    """Период действия пропуска: обязательные поля, форматы дат, порядок."""
+    ok, b, c, err = dc.validate_pass_period("2026-10-27 08:00", "27.10.2026 23:59")
+    assert ok and b == "2026-10-27 08:00:00" and c == "2026-10-27 23:59:00" and err == ""
+    ok, _b, _c, err = dc.validate_pass_period("", "2026-10-27 23:59")
+    assert not ok and "начала" in err  # обязательное поле
+    ok, _b, _c, err = dc.validate_pass_period("2026-10-27 08:00", "")
+    assert not ok and "окончания" in err  # обязательное поле
+    ok, _b, _c, err = dc.validate_pass_period("2026-10-27", "2026-10-26 23:59")
+    assert not ok and "позже" in err  # окончание раньше начала
+    ok, _b, _c, err = dc.validate_pass_period("2026-10-27 08:00", "2026-10-27 08:00")
+    assert not ok and "позже" in err  # одинаковые даты — не период
+    ok, b, _c, _e = dc.validate_pass_period("2026-10-27", "2026-10-28")
+    assert ok and b == "2026-10-27 00:00:00"  # дата без времени — начало суток
+    ok, _b, c, _e = dc.validate_pass_period("2026-10-27 08:00", "2026-10-27T23:59")
+    assert ok and c == "2026-10-27 23:59:00"  # 'T' между датой и временем
+    ok, _b, _c, err = dc.validate_pass_period("вчера", "2026-10-28")
+    assert not ok and "формат" in err
+    print("OK validate_pass_period (обязательные даты действия пропуска)")
+
+
+def test_pass_write_response() -> None:
+    """Разбор ответов recordUpdater.cgi: recNo=N (insert), OK, Error."""
+    ok, _msg, rec = dc.parse_pass_write_response("recNo=7539\r\n")
+    assert ok and rec == 7539
+    ok, _msg, rec = dc.parse_pass_write_response("OK\r\n")
+    assert ok and rec is None
+    ok, msg, rec = dc.parse_pass_write_response("Error Code260150000")
+    assert not ok and "260150000" in msg and rec is None
+    ok, _msg, _rec = dc.parse_pass_write_response("")
+    assert not ok  # пустой ответ — не успех
+    print("OK parse_pass_write_response (ответы recordUpdater.cgi)")
+
+
 def main() -> int:
     tests = [test_normalize, test_plate_decision, test_recordfinder_parsing,
              test_mjpeg_parsing,
@@ -357,7 +443,9 @@ def main() -> int:
              test_anpr_display_action,
              test_extract_plate_variants, test_images, test_photo_size,
              test_config_roundtrip,
-             test_resolution_helpers, test_snapshot_worker]
+             test_resolution_helpers, test_snapshot_worker,
+             test_pass_input_validation, test_pass_write_variants,
+             test_pass_period_validation, test_pass_write_response]
     failed = 0
     for t in tests:
         try:

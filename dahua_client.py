@@ -26,7 +26,9 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, Generator, List, Optional, Set, Tuple
+from urllib.parse import quote, urlencode
 
 import requests
 from requests.auth import HTTPDigestAuth
@@ -312,6 +314,142 @@ def parse_recordfinder_records(text: str) -> Tuple[int, List[Dict[str, str]]]:
     return total, [recs[i] for i in sorted(recs)]
 
 
+# ------------------------- Пропуска (запись в справочник камеры) -------------------------
+# Пропуск — запись allow-списка камеры (таблица TrafficRedList): номер + владелец.
+# Запись идёт через recordUpdater.cgi тем же CGI-слоем, что и чтение recordFinder.cgi:
+#   10.3.6 create — добавление, 10.3.3 update — корректировка, 10.3.5 remove — удаление.
+# JSON API VehicleRegisterDB на части прошивок недоступен (HTTP 400), поэтому
+# запись через него не используется.
+
+PASS_TABLE = "TrafficRedList"
+PASS_OWNER_DEFAULT = "Camera control"  # владелец по умолчанию для нового пропуска
+PASS_PLATE_MAX = 16  # table.PlateNumber — char[16] по документации
+# MasterOfCar прошивка принимает до 15 БАЙТ UTF-8 (проверено на живых камерах;
+# «Camera control» = 14 байт, кириллица — до ~7 знаков). Пробел в владельце
+# передаётся как %20 (см. DahuaCamera._get): '+' прошивка хранит буквально.
+PASS_OWNER_MAX_BYTES = 15
+# Формат даты-времени действия пропуска для камеры: 'ГГГГ-ММ-ДД ЧЧ:ММ:СС'.
+# Принимаются и другие написания (все нормализуются в формат камеры).
+PASS_DATETIME_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+                         "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M",
+                         "%d.%m.%Y %H:%M:%S", "%d.%m.%Y %H:%M",
+                         "%Y-%m-%d")
+
+
+def validate_pass_input(plate: str, owner: str = "") -> Tuple[bool, str, str, str]:
+    """Проверка ввода пропуска: (ok, нормализованный номер, владелец, сообщение об ошибке).
+
+    Номер нормализуется как в справочнике (normalize_plate: кириллица/раскладка
+    приводятся к латинице); владелец обрезается по краям, пустой допустим,
+    но не длиннее PASS_OWNER_MAX_BYTES байт UTF-8 (ограничение прошивки).
+    """
+    norm = normalize_plate(plate)
+    owner = str(owner or "").strip()
+    if not norm:
+        return False, "", owner, "введите номер автомобиля"
+    if len(norm) > PASS_PLATE_MAX:
+        return False, norm, owner, f"номер длиннее {PASS_PLATE_MAX} знаков"
+    if len(owner.encode("utf-8")) > PASS_OWNER_MAX_BYTES:
+        return False, norm, owner, (f"владелец длиннее {PASS_OWNER_MAX_BYTES} байт "
+                                    f"(ограничение камеры, кириллица — до ~7 знаков)")
+    return True, norm, owner, ""
+
+
+def normalize_pass_datetime(text: str) -> Tuple[bool, str, str]:
+    """Нормализация даты-времени действия пропуска: (ok, 'ГГГГ-ММ-ДД ЧЧ:ММ:СС', ошибка).
+
+    Принимаются написания из PASS_DATETIME_FORMATS; дата без времени — 00:00:00.
+    """
+    s = str(text or "").strip()
+    if not s:
+        return False, "", "пустое значение"
+    for fmt in PASS_DATETIME_FORMATS:
+        try:
+            dt = datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+        return True, dt.strftime("%Y-%m-%d %H:%M:%S"), ""
+    return False, "", ("нужен формат ГГГГ-ММ-ДД ЧЧ:ММ[:СС] "
+                       "(например 2026-10-27 23:59 или 27.10.2026 08:00)")
+
+
+def validate_pass_period(begin: str, cancel: str) -> Tuple[bool, str, str, str]:
+    """Период действия пропуска: (ok, начало, окончание, сообщение об ошибке).
+
+    Обе даты-времени обязательны (BeginTime/CancelTime записи справочника);
+    окончание действия должно быть позже начала.
+    """
+    ok, b, err = normalize_pass_datetime(begin)
+    if not ok:
+        return False, "", "", f"дата-время начала действия: {err}"
+    ok, c, err = normalize_pass_datetime(cancel)
+    if not ok:
+        return False, "", "", f"дата-время окончания действия: {err}"
+    if c <= b:
+        return False, b, c, "окончание действия должно быть позже начала"
+    return True, b, c, ""
+
+
+def build_pass_write_variants(kind: str, plate: str = "", owner: str = "",
+                              begin: str = "", cancel: str = "",
+                              rec_no: int = 0) -> List[Dict[str, str]]:
+    """Варианты параметров recordUpdater.cgi для операции kind: 'create'|'update'|'remove'.
+
+    1-й вариант — формат прошивок семейства ITC (action=insert/update/remove,
+    поля без префикса «table.», без PlateAttribute — проверено на живых камерах:
+    документационный формат там отдаёт 400/501); 2-й — по документации
+    (action=create/update/remove, поля «table.*», разделы 10.3.3/10.3.5/10.3.6).
+    begin/cancel — период действия ('ГГГГ-ММ-ДД ЧЧ:ММ:СС'); пустые — поля не шлются.
+    """
+    owner = str(owner or "").strip()
+    if kind not in ("create", "update", "remove"):
+        raise ValueError(f"неизвестная операция пропуска: {kind}")
+    out: List[Dict[str, str]] = []
+    # формат ITC-прошивок: action=insert/update/remove, поля без «table.»
+    p = {"action": "insert" if kind == "create" else kind, "name": PASS_TABLE}
+    if kind in ("update", "remove"):
+        p["RecNo"] = str(int(rec_no))
+    if kind in ("create", "update"):
+        p["PlateNumber"] = plate
+        if owner or kind == "update":  # пустой владелец: при create поле не шлём
+            p["MasterOfCar"] = owner
+        if begin:
+            p["BeginTime"] = begin
+        if cancel:
+            p["CancelTime"] = cancel
+    out.append(p)
+    # документационный формат (10.3.3/10.3.5/10.3.6): action=create/update/remove
+    p = {"action": {"create": "create", "update": "update", "remove": "remove"}[kind],
+         "name": PASS_TABLE}
+    if kind in ("update", "remove"):
+        p["table.RecNo"] = str(int(rec_no))
+    if kind in ("create", "update"):
+        p["table.PlateNumber"] = plate
+        p["table.MasterOfCar"] = owner
+        if begin:
+            p["table.BeginTime"] = begin
+        if cancel:
+            p["table.CancelTime"] = cancel
+    out.append(p)
+    return out
+
+
+def parse_pass_write_response(text: str) -> Tuple[bool, str, Optional[int]]:
+    """Разбор ответа recordUpdater.cgi: (успех, сообщение, rec_no или None).
+
+    Успех — тело 'OK' (update/remove) или 'recNo=N' (create); ошибка — 'Error Code…'.
+    """
+    body = (text or "").strip()
+    if not body:
+        return False, "пустой ответ камеры", None
+    if body.upper() == "OK":
+        return True, "OK", None
+    m = re.match(r"^recNo=(\d+)", body, re.IGNORECASE)
+    if m:
+        return True, f"recNo={m.group(1)}", int(m.group(1))
+    return False, body[:120], None
+
+
 @dataclass
 class ANPRResult:
     """Распознанное событие: номер + снимок автомобиля."""
@@ -450,6 +588,12 @@ class DahuaCamera:
 
     def _get(self, path: str, params: Optional[Dict[str, Any]] = None,
              timeout: float = 6.0) -> requests.Response:
+        # Кодируем query через quote (пробел -> %20, а не '+'): прошивка хранит
+        # значения сырыми — '+' из quote_plus она сохраняет буквально (проверено
+        # на живых камерах: %20 -> пробел, %2B -> '+'). Строку запроса передаём
+        # как есть, чтобы requests не перекодировал её обратно в quote_plus.
+        if isinstance(params, dict):
+            params = urlencode(params, quote_via=quote)
         return self.session.get(self.base + path, params=params, auth=self.auth, timeout=timeout)
 
     def get_time(self) -> str:
@@ -629,6 +773,97 @@ class DahuaCamera:
                 break
         self.last_error = ""
         return out
+
+    # ------------------------- Пропуска (запись в справочник) -------------------------
+
+    def list_passes(self) -> Optional[List[Dict[str, str]]]:
+        """Записи allow-списка камеры (TrafficRedList): PlateNumber/MasterOfCar/RecNo.
+
+        None — камера не ответила; [] — пропусков нет. Данные для редактора пропусков.
+        """
+        return self._find_traffic_records(PASS_TABLE)
+
+    def _pass_write(self, kind: str, plate: str = "", owner: str = "",
+                    begin: str = "", cancel: str = "",
+                    rec_no: int = 0) -> Tuple[bool, str, Optional[int]]:
+        """Запрос recordUpdater.cgi (create/update/remove) с перебором форматов прошивки.
+
+        Пробуются варианты build_pass_write_variants, пока камера не ответит
+        успехом ('OK'/'recNo=N'); HTTP 400/501 одного формата — пробуем следующий.
+        """
+        last_msg, last_rec = "пустой ответ камеры", None
+        for params in build_pass_write_variants(kind, plate, owner, begin, cancel,
+                                                rec_no):
+            try:
+                r = self._get("/cgi-bin/recordUpdater.cgi", params, timeout=10.0)
+            except requests.RequestException as e:
+                self.last_error = f"ошибка запроса: {e}"
+                applog("camera", f"[{self.name}] recordUpdater {kind}: {e}")
+                return False, str(e), None
+            if r.status_code != 200:
+                # формат параметров отвергнут (400/501) — пробуем альтернативный
+                last_msg = f"HTTP {r.status_code}: {r.text[:120]}"
+                continue
+            ok, msg, rno = parse_pass_write_response(r.text)
+            if ok:
+                self.last_error = ""
+                applog("camera", f"[{self.name}] recordUpdater {kind}: {msg}")
+                return True, msg, rno
+            last_msg, last_rec = msg, None
+        self.last_error = last_msg
+        applog("camera", f"[{self.name}] recordUpdater {kind}: {last_msg}")
+        return False, last_msg, last_rec
+
+    def add_pass(self, plate: str, owner: str = "", begin: str = "",
+                 cancel: str = "") -> Tuple[bool, str, Optional[int]]:
+        """Добавить пропуск в allow-список камеры (10.3.6 create): (успех, сообщение, rec_no).
+
+        begin/cancel — период действия ('ГГГГ-ММ-ДД ЧЧ:ММ[:СС]', оба обязательны,
+        если указан хотя бы один); без них период задаёт прошивка по умолчанию.
+        """
+        ok, norm, owner, err = validate_pass_input(plate, owner)
+        if not ok:
+            return False, err, None
+        if begin or cancel:
+            ok, begin, cancel, err = validate_pass_period(begin, cancel)
+            if not ok:
+                return False, err, None
+        ok, msg, rec_no = self._pass_write("create", plate=norm, owner=owner,
+                                           begin=begin, cancel=cancel)
+        if ok:
+            msg = f"добавлен пропуск {norm}" + (f" (recNo={rec_no})" if rec_no else "")
+        return ok, msg, rec_no
+
+    def update_pass(self, rec_no: int, plate: str, owner: str = "",
+                    begin: str = "", cancel: str = "") -> Tuple[bool, str]:
+        """Скорректировать пропуск (номер, владелец, период) записи RecNo (10.3.3 update)."""
+        ok, norm, owner, err = validate_pass_input(plate, owner)
+        if not ok:
+            return False, err
+        if begin or cancel:
+            ok, begin, cancel, err = validate_pass_period(begin, cancel)
+            if not ok:
+                return False, err
+        try:
+            rec = int(rec_no)
+        except (TypeError, ValueError):
+            rec = 0
+        if rec <= 0:
+            return False, "не выбран пропуск для изменения"
+        ok, msg, _ = self._pass_write("update", plate=norm, owner=owner,
+                                      begin=begin, cancel=cancel, rec_no=rec)
+        return ok, (f"изменён пропуск {norm}" if ok else msg)
+
+    def remove_pass(self, rec_no: int) -> Tuple[bool, str]:
+        """Удалить пропуск по RecNo (10.3.5 remove) — очистка устаревших пропусков (этап 2)."""
+        try:
+            rec = int(rec_no)
+        except (TypeError, ValueError):
+            rec = 0
+        if rec <= 0:
+            return False, "не выбран пропуск для удаления"
+        ok, msg, _ = self._pass_write("remove", rec_no=rec)
+        return ok, (f"удалён пропуск (recNo={rec})" if ok else msg)
 
     def _export_via_recordfinder(self) -> Optional[Dict[str, List[str]]]:
         """Снимок allow/block через таблицы TrafficRedList/TrafficBlackList (10.3.4)."""

@@ -11,6 +11,7 @@ import queue
 import threading
 import time
 import tkinter as tk
+import tkinter.ttk as ttk
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,8 +20,9 @@ from PIL import Image, ImageTk
 import dahua_client as dahua_client_mod
 from config import is_camera_configured, log_jsonl, plate_decision
 from dahua_client import (ANPRResult, DahuaCamera, AnprWorker, VideoWorker,
-                          WhitelistSyncWorker, fit_image, make_placeholder,
-                          normalize_plate)
+                          PASS_OWNER_DEFAULT, WhitelistSyncWorker, fit_image,
+                          make_placeholder, normalize_plate, validate_pass_input,
+                          validate_pass_period)
 
 # ------------------------------- Оформление -------------------------------
 
@@ -336,8 +338,11 @@ class SearchEntry(tk.Entry):
 
 
 class SidePanel(tk.Frame):
-    """Правая колонка: справочник номеров камер (ТОЛЬКО ЧТЕНИЕ) с поиском.
-    Ширина — чуть больше максимальной длины номера (PLATE_MAX_CHARS + 2 знака)."""
+    """Правая колонка: справочник номеров камер с поиском и кнопкой «Изменить».
+
+    «Изменить» открывает модальное окно добавления/корректировки пропусков
+    (запись в allow-список камеры). Ширина — чуть больше максимальной длины
+    номера (PLATE_MAX_CHARS + 2 знака)."""
 
     LIST_CHARS = PLATE_MAX_CHARS + 2  # ширина списка в знаках — «чуть больше» номера
 
@@ -357,6 +362,13 @@ class SidePanel(tk.Frame):
                                   font=("Segoe UI", 10, "bold"), justify="left",
                                   anchor="w", wraplength=w)
         self.lbl_title.pack(anchor="w")
+        # Кнопка управления пропусками — сразу под надписью «Справочник камер».
+        self.btn_edit = tk.Button(self, text="Изменить", command=self._on_edit,
+                                  bg=ACCENT, fg="white", activebackground="#1f6fd0",
+                                  activeforeground="white", relief="flat",
+                                  font=("Segoe UI", 9, "bold"), padx=8, pady=2,
+                                  cursor="hand2")
+        self.btn_edit.pack(anchor="w", pady=(4, 0))
         self.lbl_count = tk.Label(self, text="синхронизация…", bg=PANEL_BG, fg=MUTED,
                                   font=F_SMALL, justify="left", anchor="w", wraplength=w)
         self.lbl_count.pack(anchor="w")
@@ -366,10 +378,14 @@ class SidePanel(tk.Frame):
         self.lst.pack(fill="both", expand=True, pady=(4, 0))
 
     def update_camera_list(self, plates: Optional[List[str]], reason: str = "") -> None:
-        """Показать allow-номера БД камер (ТОЛЬКО ЧТЕНИЕ). None — БД недоступна (reason — почему)."""
+        """Показать allow-номера БД камер. None — БД недоступна (reason — почему)."""
         self._plates = list(plates) if plates is not None else None
         self._reason = reason
         self._apply_filter()
+
+    def _on_edit(self) -> None:
+        """Открыть модальное окно добавления/корректировки пропусков."""
+        self.app.open_pass_editor()
 
     def _apply_filter(self) -> None:
         """Перерисовать список: все номера или только вхождения поискового запроса."""
@@ -384,7 +400,7 @@ class SidePanel(tk.Frame):
         for p in shown:
             self.lst.insert("end", p)
         if len(shown) == len(self._plates):
-            self.lbl_count.config(text=f"{len(self._plates)} шт. (только чтение)", fg=MUTED)
+            self.lbl_count.config(text=f"{len(self._plates)} шт.", fg=MUTED)
         else:
             self.lbl_count.config(text=f"найдено {len(shown)} из {len(self._plates)}", fg=FG)
 
@@ -424,6 +440,304 @@ class LogPanel(tk.Frame):
             self.txt.insert("end", "\n".join(shown) + "\n")
         self.txt.see("end")
         self.txt.config(state="disabled")
+
+
+class PassDialog(tk.Toplevel):
+    """Модальное окно «Пропуска»: добавление и корректировка записей allow-списка.
+
+    Слева — список пропусков (номер + владелец) с поиском, справа — форма
+    «Номер»/«Владелец» (владелец по умолчанию «Camera control»). Запись в
+    справочник камеры идёт через recordUpdater.cgi в фоне (GUI не блокируется);
+    после успеха список перечитывается, справочник справа обновляется on_changed.
+    """
+
+    POLL_MS = 100
+
+    def __init__(self, master: tk.Misc, cameras: List[DahuaCamera], on_changed=None,
+                 log=None, default_index: int = 0):
+        super().__init__(master)
+        self.title("Пропуска — справочник камер")
+        self.configure(bg=BG)
+        self.transient(master)
+        self.resizable(False, False)
+        self.cameras = list(cameras)
+        self.on_changed = on_changed
+        self.log = log
+        self._q: "queue.Queue" = queue.Queue()
+        self._busy = False
+        self._records: List[Dict[str, str]] = []  # все записи выбранной камеры
+        self._shown: List[Dict[str, str]] = []    # после фильтра поиска
+        self._selected: Optional[Dict[str, str]] = None
+        self._build()
+        self._reset_form()  # новый пропуск: владелец и период — по умолчанию
+        self.cmb_cam.current(max(0, min(int(default_index or 0), len(self.cameras) - 1)))
+        self._center(master)  # окно — по геометрическому центру главного окна
+        self.protocol("WM_DELETE_WINDOW", self._close)
+        self.grab_set()
+        self._load()
+        self.after(self.POLL_MS, self._poll)
+
+    def _build(self) -> None:
+        top = tk.Frame(self, bg=PANEL_BG)
+        top.pack(fill="x", padx=12, pady=(10, 8))
+        tk.Label(top, text="Камера:", bg=PANEL_BG, fg=FG, font=F_SMALL).pack(side="left")
+        self.cmb_cam = ttk.Combobox(top, state="readonly", width=30,
+                                    values=[c.name for c in self.cameras])
+        self.cmb_cam.pack(side="left", padx=(6, 0))
+        self.cmb_cam.bind("<<ComboboxSelected>>", lambda _e: self._load())
+
+        body = tk.Frame(self, bg=PANEL_BG)
+        body.pack(fill="both", expand=True, padx=12)
+
+        left = tk.Frame(body, bg=PANEL_BG)
+        left.pack(side="left", fill="both", expand=True)
+        tk.Label(left, text="Пропуска", bg=PANEL_BG, fg=FG,
+                 font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        self.search = SearchEntry(left, self._apply_filter, width=32)
+        self.search.pack(anchor="w", pady=(4, 0))
+        self.lst = tk.Listbox(left, bg=ENTRY_BG, fg=FG, selectbackground=ACCENT,
+                              relief="flat", font=("Consolas", 10), height=16,
+                              width=40, exportselection=False)
+        self.lst.pack(fill="both", expand=True, pady=(4, 0))
+        self.lst.bind("<<ListboxSelect>>", self._on_select)
+
+        right = tk.Frame(body, bg=PANEL_BG)
+        right.pack(side="left", fill="y", padx=(14, 0))
+        tk.Label(right, text="Номер", bg=PANEL_BG, fg=FG, font=F_SMALL).pack(anchor="w")
+        self.ent_plate = tk.Entry(right, bg=ENTRY_BG, fg=FG, relief="flat",
+                                  font=("Consolas", 13), width=20)
+        self.ent_plate.pack(anchor="w", pady=(2, 8))
+        tk.Label(right, text="Владелец", bg=PANEL_BG, fg=FG, font=F_SMALL).pack(anchor="w")
+        self.ent_owner = tk.Entry(right, bg=ENTRY_BG, fg=FG, relief="flat",
+                                  font=("Segoe UI", 11), width=20)
+        self.ent_owner.pack(anchor="w", pady=(2, 8))
+        self.ent_owner.insert(0, PASS_OWNER_DEFAULT)
+        tk.Label(right, text="Действует с", bg=PANEL_BG, fg=FG,
+                 font=F_SMALL).pack(anchor="w")
+        self.ent_begin = tk.Entry(right, bg=ENTRY_BG, fg=FG, relief="flat",
+                                  font=("Consolas", 11), width=20)
+        self.ent_begin.pack(anchor="w", pady=(2, 8))
+        tk.Label(right, text="Действует по", bg=PANEL_BG, fg=FG,
+                 font=F_SMALL).pack(anchor="w")
+        self.ent_cancel = tk.Entry(right, bg=ENTRY_BG, fg=FG, relief="flat",
+                                   font=("Consolas", 11), width=20)
+        self.ent_cancel.pack(anchor="w", pady=(2, 2))
+        tk.Label(right, text="формат: ГГГГ-ММ-ДД ЧЧ:ММ[:СС]", bg=PANEL_BG, fg=MUTED,
+                 font=F_SMALL).pack(anchor="w", pady=(0, 10))
+
+        self.btn_add = self._btn(right, "Добавить", self._on_add, True)
+        self.btn_save = self._btn(right, "Сохранить", self._on_save, True)
+        self.btn_clear = self._btn(right, "Очистить", self._reset_form)
+        self.btn_close = self._btn(right, "Закрыть", self._close)
+        for b in (self.btn_add, self.btn_save, self.btn_clear, self.btn_close):
+            b.pack(fill="x", pady=2)
+
+        self.lbl_status = tk.Label(self, text="", bg=PANEL_BG, fg=MUTED,
+                                   font=F_SMALL, anchor="w", justify="left")
+        self.lbl_status.pack(fill="x", padx=12, pady=(8, 10))
+
+    def _btn(self, master: tk.Misc, text: str, cmd, primary: bool = False) -> tk.Button:
+        return tk.Button(master, text=text, command=cmd,
+                         bg=(ACCENT if primary else "#2a2a2a"), fg="white",
+                         activebackground=("#1f6fd0" if primary else "#3a3a3a"),
+                         activeforeground="white", relief="flat",
+                         font=("Segoe UI", 10, "bold"), padx=8, pady=4, cursor="hand2")
+
+    def _center(self, master: tk.Misc) -> None:
+        """Окно — по геометрическому центру главного окна (с учётом границ экрана)."""
+        self.update_idletasks()
+        w = max(self.winfo_reqwidth(), self.winfo_width())
+        h = max(self.winfo_reqheight(), self.winfo_height())
+        x = master.winfo_rootx() + (master.winfo_width() - w) // 2
+        y = master.winfo_rooty() + (master.winfo_height() - h) // 2
+        x = max(0, min(x, self.winfo_screenwidth() - w))
+        y = max(0, min(y, self.winfo_screenheight() - h))
+        self.geometry(f"+{x}+{y}")
+
+    def _cam(self) -> DahuaCamera:
+        return self.cameras[self.cmb_cam.current()]
+
+    def _status(self, text: str, color: str = MUTED) -> None:
+        self.lbl_status.config(text=text, fg=color)
+
+    def _set_busy(self, busy: bool) -> None:
+        self._busy = busy
+        for b in (self.btn_add, self.btn_save, self.btn_clear):
+            b.config(state="disabled" if busy else "normal")
+        self.cmb_cam.config(state="disabled" if busy else "readonly")
+
+    def _display(self, rec: Dict[str, str]) -> str:
+        return f"{rec.get('PlateNumber', ''):<16} {rec.get('MasterOfCar', '')}".rstrip()
+
+    def _load(self) -> None:
+        """Перечитать список пропусков выбранной камеры (в фоне)."""
+        if not self.cameras or self._busy:
+            return
+        idx = self.cmb_cam.current()
+        cam = self.cameras[idx]
+        self._set_busy(True)
+        self._status(f"загрузка пропусков ({cam.name})…")
+
+        def work() -> None:
+            recs = cam.list_passes()
+            self._q.put(("loaded", idx, cam.name, recs, cam.last_error))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _run_op(self, what: str, cam: DahuaCamera, fn) -> None:
+        """Запуск операции записи в фоне: GUI не блокируется (очередь + after)."""
+        if self._busy:
+            return
+        self._set_busy(True)
+        self._status(f"{what}…")
+
+        def work() -> None:
+            try:
+                res = fn()
+            except Exception as e:  # сеть и т.п. не должны ронять GUI
+                res = (False, str(e))
+            ok, msg = bool(res[0]), str(res[1])
+            snap = None
+            if ok:
+                # сразу перечитываем БД камеры — правая панель обновится без ожидания
+                snap = cam.export_camera_plates()
+                if snap is None:
+                    snap = {"ok": False, "reason": cam.last_error or "БД недоступна"}
+            self._q.put(("op", ok, msg, cam.name, snap))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _form(self) -> Tuple[bool, str, str, str, str, str]:
+        """Значения формы: (ok, номер, владелец, начало действия, окончание, ошибка)."""
+        ok, plate, owner, err = validate_pass_input(self.ent_plate.get(),
+                                                    self.ent_owner.get())
+        if not ok:
+            return False, "", "", "", "", err
+        ok, begin, cancel, err = validate_pass_period(self.ent_begin.get(),
+                                                      self.ent_cancel.get())
+        if not ok:
+            return False, "", "", "", "", err
+        return True, plate, owner, begin, cancel, ""
+
+    def _on_add(self) -> None:
+        """Добавить новый пропуск (номер, владелец, период действия)."""
+        ok, plate, owner, begin, cancel, err = self._form()
+        if not ok:
+            self._status(f"✗ {err}", RED)
+            return
+        cam = self._cam()
+        self._run_op(f"добавление {plate}", cam,
+                     lambda: cam.add_pass(plate, owner, begin, cancel))
+
+    def _on_save(self) -> None:
+        """Скорректировать выбранный пропуск (номер, владелец, период действия)."""
+        rec = self._selected
+        if not rec or not str(rec.get("RecNo") or "").strip():
+            self._status("✗ выберите пропуск в списке для изменения", RED)
+            return
+        ok, plate, owner, begin, cancel, err = self._form()
+        if not ok:
+            self._status(f"✗ {err}", RED)
+            return
+        cam = self._cam()
+        rec_no = int(rec.get("RecNo") or 0)
+        self._run_op(f"изменение {plate}", cam,
+                     lambda: cam.update_pass(rec_no, plate, owner, begin, cancel))
+
+    def _reset_form(self) -> None:
+        """Очистить форму: новый пропуск, владелец и период — значения по умолчанию."""
+        self._selected = None
+        self.lst.selection_clear(0, "end")
+        self.ent_plate.delete(0, "end")
+        self.ent_owner.delete(0, "end")
+        self.ent_owner.insert(0, PASS_OWNER_DEFAULT)
+        # период действия нового пропуска: с текущего момента до конца суток
+        now = datetime.now()
+        self.ent_begin.delete(0, "end")
+        self.ent_begin.insert(0, now.strftime("%Y-%m-%d %H:%M:%S"))
+        self.ent_cancel.delete(0, "end")
+        self.ent_cancel.insert(0, now.strftime("%Y-%m-%d") + " 23:59:59")
+        self.ent_plate.focus_set()
+
+    def _on_select(self, _event=None) -> None:
+        """Выбор пропуска в списке — заполнить форму его номером, владельцем и периодом."""
+        sel = self.lst.curselection()
+        if not sel or sel[0] >= len(self._shown):
+            return
+        rec = self._shown[sel[0]]
+        self._selected = rec
+        self.ent_plate.delete(0, "end")
+        self.ent_plate.insert(0, rec.get("PlateNumber", ""))
+        self.ent_owner.delete(0, "end")
+        self.ent_owner.insert(0, rec.get("MasterOfCar", ""))
+        self.ent_begin.delete(0, "end")
+        self.ent_begin.insert(0, rec.get("BeginTime", ""))
+        self.ent_cancel.delete(0, "end")
+        self.ent_cancel.insert(0, rec.get("CancelTime", ""))
+        self._status(f"выбран пропуск RecNo={rec.get('RecNo', '?')}", MUTED)
+
+    def _apply_filter(self) -> None:
+        """Список целиком или только вхождения поискового запроса (со 2-го символа)."""
+        items = [self._display(r) for r in self._records]
+        counts: Dict[str, int] = {}
+        for s in search_filter(self.search.query(), items):
+            counts[s] = counts.get(s, 0) + 1
+        self._shown = []
+        for r, s in zip(self._records, items):
+            if counts.get(s, 0) > 0:
+                counts[s] -= 1
+                self._shown.append(r)
+        self.lst.delete(0, "end")
+        for r in self._shown:
+            self.lst.insert("end", self._display(r))
+        if self.search.query() and len(self._shown) != len(self._records):
+            self._status(f"найдено {len(self._shown)} из {len(self._records)}", MUTED)
+
+    def _poll(self) -> None:
+        try:
+            while True:
+                try:
+                    ev = self._q.get_nowait()
+                except queue.Empty:
+                    break
+                self._handle(ev)
+        finally:
+            if self.winfo_exists():
+                self.after(self.POLL_MS, self._poll)
+
+    def _handle(self, ev: tuple) -> None:
+        if ev[0] == "loaded":
+            _tag, idx, _cam_name, recs, err = ev
+            self._set_busy(False)
+            if idx != self.cmb_cam.current():
+                return  # пользователь уже переключил камеру
+            if recs is None:
+                self._records, self._shown = [], []
+                self._apply_filter()
+                self._status(f"✗ справочник недоступен: {err or 'ошибка запроса'}", RED)
+                return
+            self._records = sorted(
+                recs, key=lambda r: normalize_plate(r.get("PlateNumber", "")))
+            self._apply_filter()
+            self._status(f"записей: {len(self._records)}", MUTED)
+        elif ev[0] == "op":
+            _tag, ok, msg, cam_name, snap = ev
+            self._set_busy(False)
+            self._status(f"{'✓' if ok else '✗'} {msg}", GREEN if ok else RED)
+            if self.log:
+                self.log(f"[{cam_name}] пропуска: {'✓' if ok else '✗'} {msg}")
+            if snap is not None and self.on_changed is not None:
+                self.on_changed(cam_name, snap)
+            if ok:
+                self._reset_form()
+                self._load()
+
+    def _close(self) -> None:
+        try:
+            self.grab_release()
+        except tk.TclError:
+            pass
+        self.destroy()
 
 
 class App:
@@ -611,6 +925,10 @@ class App:
                     self.log_panel.log(ev[1])
                 elif kind == "gate_done":
                     self._gate_done(ev[1], ev[2], ev[3])
+                elif kind == "camera_plates":
+                    # свежий снимок БД после записи пропуска (редактор пропусков)
+                    self.camera_plates[ev[1]] = ev[2]
+                    self._refresh_side_list()
             for i, (_vw, _aw, frame_q, anpr_q, status_q, wl_q) in enumerate(self.workers):
                 panel = self.panels[i]
                 panel.tick_status()  # индикация «поток пропал», если кадры не идут
@@ -693,6 +1011,25 @@ class App:
         self.side.update_camera_list(None, reason)
 
     # --------------------------- действия ---------------------------
+
+    def open_pass_editor(self) -> None:
+        """Модальное окно добавления/корректировки пропусков (запись в БД камеры)."""
+        if not self.cameras:
+            return
+        # по умолчанию — камера, чей справочник сейчас показан справа
+        default = 0
+        for i, cam in enumerate(self.cameras):
+            snap = self.camera_plates.get(cam.name)
+            if isinstance(snap, dict) and snap.get("ok", True):
+                default = i
+                break
+
+        def on_changed(cam_name: str, snap: Dict[str, Any]) -> None:
+            # обновление правой панели — через очередь UI-событий главного окна
+            self._ui_q.put(("camera_plates", cam_name, snap))
+
+        PassDialog(self.root, self.cameras, on_changed=on_changed,
+                   log=self.log_panel.log, default_index=default)
 
     def open_gate(self, index: int) -> None:
         """Открыть ворота выбранной камеры в отдельном потоке (GUI не блокируется)."""

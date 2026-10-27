@@ -1,0 +1,1432 @@
+=== PAGE 587 ===
+ 
+Intelligent Traffic APIs 586 
+Events[0].Vehicle.Text=Audi 
+Events[0].Vehicle.SubText=A6L 
+Events[0].Vehicle.SubBrand=5 
+Events[0].Vehicle.BrandYear=2 
+Events[0].TrafficCar.RecNo=123 
+Events[0].StartParking=6538920 
+Events[0].AlarmInterval=180 
+Events[0].ParkingAllowedTime=1600 
+… 
+--<boundary> 
+Content-Type: image/jpeg 
+Content-Length: <image size> 
+ 
+<Jpeg image data> 
+--<boundary> 
+ 
+10.2 Traffic Flow 
+10.2.1 [Event] TrafficFlowStat 
+When traffic flow trigger the rule, send this event 
+Event Code 
+TrafficFlowStat 
+Event action 
+Start/Stop 
+Event index 
+0 
+Event Data 
+Name 
+Type 
+R/O 
+Description 
+Example 
++FlowStates 
+object[] 
+R 
+Traffic flow info, each object in list 
+is traffic flow info about one lane. 
+ 
+++Lane 
+int 
+R 
+Lane number, start from 0. 
+0 
+++Flow 
+int 
+R 
+Traffic flow number. 
+50 
+++Period 
+int 
+R 
+Traffic stat time, unit is minute. 
+5 
+++PeriodByMili 
+int 
+O 
+Traffic stat time, unit is 
+millisecond, value should between 
+0 and 59999. 
+655 
+++DrivingDirecti
+on 
+char[][] 
+O 
+Driving direction, should be an 
+array of three strings: 
+ 
+1st string: direction, can be: 
+"Approach", "Leave" 
+ 
+2nd string: Approach position 
+name 
+ 
+3rd string: Leave position 
+name 
+[ "Approach", 
+"XXXCity", "YYYCity"] 
+ 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 588 ===
+ 
+Intelligent Traffic APIs 587 
+Event Response Example ( multipart , JSON format in body ) ( response to 4.9.17 event 
+subscription ) 
+--<boundary> 
+Content-Type: text/plain 
+Content-Length: xxxx 
+ 
+Code=TrafficFlowStat;action=Pulse;index=0;data={ 
+  "FlowStates": [ { "Lane": 0, 
+      "Flow": 50, 
+      "Period": 5, 
+      "DrivingDirection": [ "Approach", "XXXCity", "YYYCity"] 
+}, {…}, … ] 
+} 
+--<boundary> 
+10.2.2 Find Traffic Flow History 
+Request URL 
+http://<server>/cgi-bin/recordFinder.cgi?action=find 
+Method 
+GET 
+Request Params ( key=value format in URL) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[] 
+R 
+The name of record table. It should be 
+"TrafficFlow". 
+TrafficFlow 
+count 
+int 
+O 
+Max result to return, default is 1024. 
+100 
+StartTime 
+char[] 
+O 
+The start of the record's CreateTime. 
+123456700 
+EndTime 
+char[] 
+O 
+The End of the record's CreateTime. 
+123456800 
+condition 
+object 
+O 
+Search condition. 
+ 
++Channel 
+int 
+O 
+Video channel index which starts from 0. 
+0 
++Lane 
+int 
+O 
+Lane index, starts from 0. 
+0 
+Request Example 
+http://192.168.1.108/cgi-
+bin/recordFinder.cgi?action=find&name=TrafficFlow&condition.Channel=0&condition.Lane=0&StartTi
+me=123456700&EndTime=123456800&count=100 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+totalCount 
+int 
+O 
+Total record num that find. 
+1000 
+found 
+int 
+O 
+Record num that returned. 
+100 
+records 
+object[] 
+R 
+The records that returned. 
+ 
++RecNo 
+int 
+R 
+Record id. 
+12345 
++CreateTime 
+int 
+R 
+The create time of record. 
+123456789 
++StatisticsTime 
+int 
+R 
+Traffic flow statistics time, UTC seconds. 
+123456789 
++Period 
+int 
+R 
+Statistics period, unit is second. 
+300 
++Channel 
+int 
+R 
+Video channel index which starts from 0. 
+0 
++Lane 
+int 
+R 
+Lane index, starts from 0. 
+0 
++Vehicles 
+int 
+R 
+Total vehicle num. 
+220 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 589 ===
+ 
+Intelligent Traffic APIs 588 
++AverageSpee
+d 
+float 
+O 
+Average speed of the vehicle, -1 means no 
+vehicle, 0 means congestion. 
+21.8 
+Response Example 
+totalCount=1000 
+found=100 
+records[0].RecNo=12345 
+records[0].CreateTime=123456789 
+records[0].StaticsticsTime=123456789 
+records[0].Period=300 
+records[0].Channel=0 
+records[0].Lane=0 
+records[0].Vehicles=250 
+records[0].AverageSpeed=25.4 
+… 
+records[1].RecNo=13579 
+records[1].CreateTime=123456799 
+records[1].StaticsticsTime=123456799 
+records[1].Period=300 
+records[1].Channel=0 
+records[1].Lane=0 
+records[1].Vehicles=220 
+records[1].AverageSpeed=21.8 
+… 
+10.2.3 Start Traffic Statistics Search 
+Request URL 
+http://<server>/cgi-bin/api/trafficFlowStat/startFind 
+Method 
+POST 
+Request Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+condition 
+object 
+R 
+Traffic flow statistical conditions 
+ 
++StartTime 
+systemtime 
+R 
+Start time, accurate to hour 
+"2010-05-25 00:00:00" 
++EndTime 
+systemtime 
+R 
+End time, accurate to hour 
+"2010-05-25 23:59:59" 
++Channel 
+int 
+O 
+Channel number 
+0 
++Lane 
+int 
+O 
+Lane number 
+0 
++Lanes 
+int[] 
+O 
+Lane number array, supports data 
+search by multiple lanes 
+[0] 
++ClassType 
+int 
+O 
+As video metadata and road 
+monitoring use the same database 
+table, they need to be distinguished 
+according to their types (0 
+represents video metadata and 1 
+represents road monitoring). 
+1 
++Granularity 
+enumchar[
+8] 
+O 
+The granularity of statistical 
+information that needs to be 
+returned in the searching process. 
+This needs to be supported by 
+"Hour" 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 590 ===
+ 
+Intelligent Traffic APIs 589 
+getCaps.  
+Enumchar[8]{  
+"Minute": By 5 minutes (hourly 
+report)  
+"Hour": By hour (daily report)  
+"Day": By day (monthly report)  
+"Month": By month (yearly report)  
+}  
+The default value is Hour. 
++PresetID 
+int[] 
+O 
+Preset 
+[1] 
++Direction 
+enumchar[
+16] 
+O 
+Search by statistical direction 
+enumchar[16]{  
+"Both"  
+"LeftToRight"  
+"RightToLeft"  
+} 
+"Both" 
++Channels 
+int[256] 
+O 
+Channel number array. Used in 
+structured traffic statistics. In multi-
+channel query, the channel number 
+is distributed to query the total data 
+of all channels 
+There must be at least one channel 
+and channels field. Generally, they 
+should not both exist. If both exist, 
+channels shall prevail. 
+[0,1,2,5] 
+Request Example 
+{ 
+    "condition": { 
+        "StartTime": "2010-05-25 00:00:00", 
+        "EndTime": "2010-05-25 23:59:59", 
+        "Channel": 0, 
+        "Lane": 0, 
+        "Lanes": [0], 
+        "ClassType": 1, 
+        "Granularity": "Hour", 
+        "PresetID": [1], 
+        "Direction": "Both", 
+        "Channels": [0,1,2,5] 
+    } 
+} 
+ 
+Response Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+token 
+uint 
+O 
+token 
+2342343 
+totalCount 
+uint 
+O 
+Total number of results that meet the 
+query criteria 
+333 
+Response Example 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 591 ===
+ 
+Intelligent Traffic APIs 590 
+{ 
+    "token": 2342343, 
+    "totalCount": 333 
+} 
+10.2.4 Get Traffic Statistics 
+Request URL 
+http://<server>/cgi-bin/api/trafficFlowStat/doFind 
+Method 
+POST 
+Request Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+token 
+uint 
+R 
+Search token. 
+46878 
+beginNumber 
+uint 
+R 
+Search begin number.  
+That is to start from the beginNumber 
+records, fetch the count records, and 
+return.  
+0<=beginNumber<=totalCount-1 
+0 
+count 
+uint 
+R 
+Number of traffic statistic entries per 
+search 
+24 
+Request Example 
+{ 
+    "token": 46878, 
+    "beginNumber": 0, 
+    "count": 24 
+} 
+ 
+Response Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+found 
+int 
+R 
+Number of entries that are searched 
+12 
+info 
+Info[] 
+R 
+Traffic statistics (For details, see traffic-
+flow statistics status information 
+structure in standard.) 
+[, … ] 
+Response Example 
+{ 
+    "found": 12, 
+"info": [{ 
+    "PresetID" : 1 
+    "DrivingDirection" : ["Approach", "XXXCity", "YYYCity"], 
+    "Lane" : 1, 
+    "MachineAddress" : "XXX District, YYY Road", 
+    "MachineName" : "Device001", 
+    "UTC" : 1465389203, 
+    "UTCMS" : 123, 
+    …… 
+},…{}] 
+} 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 592 ===
+ 
+Intelligent Traffic APIs 591 
+10.2.5 End Traffic Statistics Search 
+Request URL 
+http://<server>/cgi-bin/api/trafficFlowStat/stopFind 
+Method 
+POST 
+Request Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+token 
+uint 
+R 
+Search token. 
+46878 
+Request Example 
+{ 
+    "token": 46878 
+} 
+ 
+Response Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Response Example 
+{} 
+ 
+10.3 Traffic Record 
+10.3.1 Insert Traffic BlockList/AllowList Record 
+Request URL 
+http://<server>/cgi-bin/recordUpdater.cgi?action=insert 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[] 
+R 
+The 
+record 
+table 
+name, 
+"TrafficBlackList" for BlockList and 
+"TrafficRedList" for AllowList. 
+TrafficBlackList 
+PlateNumber 
+char[] 
+R 
+The number of car plate, max string 
+length is 31. It must be unique.  
+AC00001 
+MasterOfCar 
+char[] 
+O 
+The car owner, max string length is 15 
+ 
+PlateColor 
+char[] 
+O 
+Plate color, max string length is 31, ex: 
+"Yellow", "Blue", … etc. 
+Yellow 
+PlateType 
+char[] 
+O 
+Plate type, max string length is 31. 
+ 
+VehicleType 
+char[] 
+O 
+Vehicle type, max string length is 31. 
+ 
+VehicleColor 
+char[] 
+O 
+Vehicle color, max string length is 31. ex: 
+"Yellow", "Blue", … etc. 
+Yellow 
+BeginTime 
+char[] 
+O 
+Begin time, ex: "2010-05-25 00:00:00". 
+"2010-05-25 
+00:00:00" 
+CancelTime 
+char[] 
+O 
+Cancel time, ex: "2010-06-25 00:00:00". 
+"2010-06-25 
+00:00:00" 
+AuthorityList 
+object 
+O 
+Authority 
+list, 
+only 
+valid 
+for 
+"TrafficRedList" table. 
+ 
++OpenGate 
+bool 
+O 
+Authority to open the gate. 
+true 
+Request Example 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 593 ===
+ 
+Intelligent Traffic APIs 592 
+http://192.168.1.108/cgi-
+bin/recordUpdater.cgi?action=insert&name=TrafficBlackList&PlateNumber=AC00001&MasterOfCar=
+ZhangSan&PlateColor=Yellow&VehicleColor=Blue&BeginTime=2011-01-
+01%2012:00:00&CancelTime=2011-01-10%2012:00:00 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+RecNo 
+int 
+R 
+The new record’s id, return -1 if the device 
+handles asynchronously. 
+12345 
+Response Example 
+RecNo=12345 
+10.3.2 Update Traffic BlockList/AllowList Record 
+Request URL 
+http://<server>/cgi-bin/recordUpdater.cgi?action=update 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[] 
+R 
+The 
+record 
+table 
+name, 
+"TrafficBlackList" for BlockList and 
+"TrafficRedList"for AllowList. 
+TrafficBlackList 
+recno 
+int 
+R 
+record id 
+12345 
+PlateNumber 
+char[] 
+R 
+The number of car plate, max string 
+length is 31. It must be unique.  
+AC00001 
+MasterOfCar 
+char[] 
+O 
+The car owner, max string length is 15 
+ 
+PlateColor 
+char[] 
+O 
+Plate color, max string length is 31, ex: 
+"Yellow", "Blue", … etc. 
+Yellow 
+PlateType 
+char[] 
+O 
+Plate type, max string length is 31. 
+ 
+VehicleType 
+char[] 
+O 
+Vehicle type, max string length is 31. 
+ 
+VehicleColor 
+char[] 
+O 
+Vehicle color, max string length is 31. ex: 
+"Yellow", "Blue", … etc. 
+Yellow 
+BeginTime 
+char[] 
+O 
+Begin time, ex: "2010-05-25 00:00:00". 
+"2010-05-25 
+00:00:00" 
+CancelTime 
+char[] 
+O 
+Cancel time, ex: "2010-06-25 00:00:00". 
+"2010-06-25 
+00:00:00" 
+AuthorityList 
+object 
+O 
+Authority 
+list, 
+only 
+valid 
+for 
+"TrafficRedList" table. 
+ 
++OpenGate 
+bool 
+O 
+Authority to open the gate. 
+true 
+Request Example 
+http://192.168.1.108/cgi-
+bin/recordUpdater.cgi?action=update&name=TrafficBlackList&recno=12345&PlateNumber=AC00001
+&MasterOfCar=ZhangSan&PlateColor=Yellow&VehicleColor=Blue&BeginTime=2011-01-
+01%2012:00:00&CancelTime=2011-01-10%2012:00:00 
+ 
+Response Params ( OK in body ) 
+Response Example 
+OK 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 594 ===
+ 
+Intelligent Traffic APIs 593 
+10.3.3 Remove Traffic BlockList/AllowList Record 
+Request URL 
+http://<server>/cgi-bin/recordUpdater.cgi?action=remove 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[] 
+R 
+The 
+record 
+table 
+name, 
+"TrafficBlackList"for 
+BlockList 
+and 
+"TrafficRedList"for AllowList. 
+TrafficBlackList 
+recno 
+int 
+R 
+The record id. 
+12345 
+Request Example 
+http://192.168.1.108/cgi-bin/recordUpdater.cgi?action=remove&name=TrafficBlackList&recno=12345 
+ 
+Response Params ( OK in body ) 
+Response Example 
+OK 
+10.3.4 Find Traffic BlockList/AllowList Record 
+Request URL 
+http://<server>/cgi-bin/recordFinder.cgi?action=find 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[] 
+R 
+The record table name, 
+"TrafficBlackList"for BlockList and 
+"TrafficRedList"for AllowList. 
+TrafficBlackList 
+count 
+int 
+O 
+Max result to return, default is 1024. 
+100 
+StartTime 
+string 
+O 
+The start of the record's CreateTime. 
+123456700 
+EndTime 
+string 
+O 
+The end of the record's CreateTime. 
+123456800 
+condition 
+object 
+O 
+Search condition. 
+ 
++PlateNumber 
+char[] 
+O 
+Car plate number, max string length is 
+47. 
+AC00001 
++PlateNumber
+Vague 
+char[] 
+O 
+Car plate number substring, match any 
+car plate number that contain this 
+substring, max string length is 47. 
+ 
++PlateNumber
+VagueGroup 
+char[][] 
+O 
+Car plate number substring array, max 
+string length is 47. 
+ 
++QueryCount 
+int 
+O 
+Query count, default is 1000. 
+500 
++QueryResult
+Begin 
+int 
+O 
+Begin number in the result set, default is 
+0. 
+0 
+Request Example 
+http://192.168.1.108/cgi-
+bin/recordFinder.cgi?action=find&name=TrafficBlackList&condition.PlateNumber=AC00001&StartTim
+e=123456700&EndTime=123456800&count=100 
+ 
+Response Params ( key=value format in body ) 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 595 ===
+ 
+Intelligent Traffic APIs 594 
+Name 
+Type 
+R/O 
+Description 
+Example 
+totalCount 
+int 
+O 
+Total record num that find. 
+1000 
+found 
+int 
+O 
+Record num that returned. 
+100 
+records 
+object[] 
+R 
+The records that returned. 
+ 
++RecNo 
+int 
+R 
+Record id. 
+12345 
++CreateTime 
+int 
+R 
+The create time of record. 
+123456789 
++PlateNumber 
+char[] 
+R 
+Car plate number. 
+AC00001 
++MasterOfCar 
+char[] 
+O 
+Car owner. 
+ZhangSan 
++… 
+- 
+- 
+…<see above insert command for other 
+params of the record> 
+ 
+Response Example 
+totalCount=1000 
+found=100 
+records[0].RecNo=12345 
+records[0].CreateTime=123456789 
+records[0].PlateNumber=AC00001 
+records[0].MasterOfCar=ZhangSan 
+… 
+records[1].RecNo=13579 
+records[1].CreateTime=123456799 
+records[1].PlateNumber=AC00001 
+records[1].MasterOfCar=LiSi 
+… 
+10.3.5 RemoveEx Traffic BlockList/AllowList Record 
+Request URL 
+http://<server>/cgi-bin/recordUpdater.cgi?action=removeEx 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[] 
+R 
+The 
+record 
+table 
+name, 
+"TrafficBlackList"for 
+BlockList 
+and 
+"TrafficRedList"for AllowList. 
+TrafficBlackList 
+recno 
+int 
+O 
+The record id. 
+12345 
+PlateNumber 
+string 
+O 
+The number of car plate, max string 
+length is 31. It must be unique.  
+AC00001 
+Request Example 
+http://192.168.1.108/cgi-
+bin/recordUpdater.cgi?action=removeEx&name=TrafficBlackList&PlateNumber=AC00001 
+ 
+Response Params ( OK in body ) 
+Response Example 
+OK 
+10.3.6 Import Traffic BlockList/AllowList 
+ 
+Import the traffic blocklist and allowlist 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 596 ===
+ 
+Intelligent Traffic APIs 595 
+Upload a blocklist or allowlist file to the device, and then import the data into the device. This 
+operation might take a long time. 
+Request URL 
+http://<server>/cgi-bin/trafficRecord.cgi?action=uploadFile&Type=<Type> 
+Method 
+POST 
+Request Params ( key=value format in URL ; binary data in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Type 
+char[16] 
+R 
+File type, value: 
+"TrafficBlackList”  Traffic blocklist 
+"TrafficRedList"  Traffic allowlist 
+"TrafficBlackList" 
+format 
+char[16] 
+R 
+File format, fixed to "CSV” 
+"CSV” 
+code 
+char[16] 
+R 
+Encoding format, the value is "utf-8" or 
+"GB2312” 
+"utf-8" 
+Request Example 
+POST http://192.168.1.108/cgi-bin/trafficRecord.cgi?action=uploadFile&Type=TrafficBlackList&forma
+t=CSV&code=utf-8 HTTP/1.1 
+User-Agent: Client/1.0 
+Content-Type: multipart/form-data; boundary=<boundary> 
+Content-Length:XXXX 
+ 
+--<boundary> 
+Content-Disposition: form-data; name="blackfile"; filename="TrafficBlackList.CSV" 
+Content-Type: application/vnd.ms-excel 
+ 
+<File data….> 
+--<boundary>-- 
+ 
+Response Params ( OK in body ) 
+Response Example 
+OK 
+10.3.7 Export Traffic BlockList/AllowList 
+ 
+Asynchronously export traffic blocklist and allowlist 
+Notify the device to export the traffic blocklist and allowlist to the file. This operation is non-blocking. 
+To obtain the export result, please run the“getFileExportState” command. 
+Request URL 
+http://<server>/cgi-bin/recordUpdater.cgi?action=exportAsyncFile&name=<Name> 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[16] 
+R 
+File type, value: 
+"TrafficBlackList” Traffic blocklist 
+"TrafficRedList" Traffic allowlist 
+"TrafficBlackList" 
+filename 
+char[256] 
+O 
+Export Filename 
+"RecordFile01" 
+format 
+char[16] 
+R 
+File format, fixed to "CSV” 
+CSV 
+code 
+char[16] 
+R 
+Encoding format, the value is "utf-8" 
+or "GB2312” 
+"utf-8" 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 597 ===
+ 
+Intelligent Traffic APIs 596 
+Request Example 
+http://<server>/cgi-
+bin/recordUpdater.cgi?action=exportAsyncFile&name=TrafficBlackList&filename=RecordFile01&form
+at=CSV&code=utf-8 
+ 
+Response Params ( OK in body ) 
+Response Example 
+OK 
+ 
+Get the status of the exported traffic blocklist and allowlist 
+Get the result of the exported traffic blocklist and allowlist 
+Request URL 
+http://<server>/cgi-
+bin/recordUpdater.cgi?action=getFileExportState&name=<Name> 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[16] 
+R 
+File type, value: 
+"TrafficBlackList” Traffic blocklist 
+"TrafficRedList" Traffic allowlist 
+"TrafficBlackList" 
+Request Example 
+http://<server>/cgi-bin/recordUpdater.cgi?action=getFileExportState&name=TrafficBlackList 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+state 
+int 
+R 
+Exporting status: 
+0: Success 
+1: Failure 
+2: running 
+3: the file is invalid 
+4: the file is too large 
+5: the file has duplicate data 
+1 
+Response Example 
+state=0 
+ 
+Download the exported traffic blocklist and allowlist file 
+Download the exported traffic blocklist and allowlist file 
+Request URL 
+http://<server>/cgi-bin/trafficRecord.cgi?action=downloadFile&Type=<Type> 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Type 
+char[16] 
+O 
+File type, value: 
+"TrafficBlackList”: Traffic blocklist 
+"TrafficRedList": Traffic allowlist 
+"TrafficBlackList" 
+filename 
+char[256] 
+O 
+The exported file name must be the 
+same as the file name used in the 
+export command(exportAsyncFile). 
+"RecordFile01" 
+Request Example 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 598 ===
+ 
+Intelligent Traffic APIs 597 
+http://<server>/cgi-bin/trafficRecord.cgi?action=downloadFile&Type=TrafficBlackList&filename=Recor
+dFile01 
+ 
+Response Params ( binary in body ) 
+Response Example 
+HTTP/1.1 200 OK 
+Server: Device/1.0 
+Content-Type: application/octet-stream 
+Content-Length: xxx 
+ 
+<File Data…> 
+10.3.8 Export Traffic Flow 
+ 
+Export traffic flow records 
+Notify the device to export the traffic flow records to the file. This operation is non-blocking. To 
+obtain the export result, please run the“getFileExportState” command. 
+Request URL 
+http://<server>/cgi-bin/recordUpdater.cgi?action=exportAsyncFile&name=TrafficFlo
+w 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[16] 
+R 
+File type, fixed value: "TrafficFlow” 
+"TrafficFlow" 
+filename 
+char[256] 
+O 
+Name of the exported file 
+"RecordFile01" 
+format 
+char[16] 
+R 
+Format of the exported file, fixed to 
+"CSV” 
+CSV 
+code 
+char[16] 
+R 
+Encoding format of the exported file, 
+the value is "utf-8" or "GB2312” 
+"utf-8" 
+Request Example 
+http://<server>/cgi-bin/recordUpdater.cgi?action=exportAsyncFile&name=TrafficFlow&filename=Reco
+rdFile01&format=CSV&code=utf-8 
+ 
+Response Params ( OK in body ) 
+Response Example 
+OK 
+ 
+Get the exported traffic flow record results 
+Get the exported traffic flow record results 
+Request URL 
+http://<server>/cgi-bin/recordUpdater.cgi?action=getFileExportState&name=TrafficF
+low 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[16] 
+R 
+File type, fixed value: "TrafficFlow” 
+"TrafficFlow" 
+Request Example 
+http://<server>/cgi-bin/recordUpdater.cgi?action=getFileExportState&name=TrafficFlow 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 599 ===
+ 
+Intelligent Traffic APIs 598 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+state 
+int 
+R 
+Export status, the value is 0: success, 
+1: failure, 2: running, 3: the file is 
+invalid, 4: the file is too large, 5: the 
+file has duplicate data 
+1 
+Response Example 
+state=0 
+ 
+Download Export 0 traffic flow records File 
+Download the exported traffic flow log file 
+Request URL 
+http://<server>/cgi-bin/trafficRecord.cgi?action=downloadFile&Type=TrafficFlow 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Type 
+char[16] 
+O 
+File type, fixed value: "TrafficFlow” 
+"TrafficFlow" 
+filename 
+char[256] 
+O 
+The exported file name must be the 
+same as the file name used in the 
+export command (exportAsyncFile). 
+"RecordFile01" 
+Request Example 
+http://<server>/cgi-bin/trafficRecord.cgi?action=downloadFile&Type=TrafficFlow&filename=RecordFil
+e01 
+ 
+Response Params ( binary in body ) 
+Response Example 
+HTTP/1.1 200 OK 
+Server: Device/1.0 
+Content-Type: application/octet-stream 
+Content-Length: xxx 
+ 
+<File Data…> 
+10.3.9 Export Traffic Snap Event Info 
+ 
+Export traffic snapshot event records 
+Notify the device to export the traffic snapshot event records to the file. This operation is non-
+blocking. To obtain the export result, please run the “getFileExportState” command. 
+Request URL 
+http://<server>/cgi-bin/recordUpdater.cgi?action=exportAsyncFileByConditon&nam
+e=TrafficSnapEventInfo 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[16] 
+R 
+File type, fixed value: 
+"TrafficSnapEventInfo" 
+"TrafficSnapEventInf
+o" 
+filename 
+char[256] 
+O 
+Export Filename 
+"RecordFile01" 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 600 ===
+ 
+Intelligent Traffic APIs 599 
+format 
+char[16] 
+R 
+File format, fixed to "CSV" 
+CSV 
+code 
+char[16] 
+R 
+Encoding format, the value is "utf-8" or 
+"GB2312" 
+"utf-8" 
+condition 
+object 
+R 
+Data Conditions 
+ 
++startTime 
+char[16] 
+R 
+Export the Start time, local UTC seconds "1465389120" 
++endTime 
+char[16] 
+R 
+Export the End time, local UTC seconds 
+"1465399120" 
+Request Example 
+http://<server>/cgi-bin/recordUpdater.cgi?action=exportAsyncFileByConditon&name=TrafficSnapEve
+ntInfo&filename=RecordFile01&format=CSV&code=utf-8&condition.startTime=1465389120&conditio
+n.endTime=1465399120 
+ 
+Response Params ( OK in body ) 
+Response Example 
+OK 
+ 
+Obtain and export traffic snapshot event record results 
+Obtain and export traffic snapshot event record results 
+Request URL 
+http://<server>/cgi-bin/recordUpdater.cgi?action=getFileExportState&name=TrafficS
+napEventInfo 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+name 
+char[16] 
+R 
+File type, fixed value: 
+"TrafficSnapEventInfo" 
+"TrafficSnapEventInfo" 
+Request Example 
+http://<server>/cgi-bin/recordUpdater.cgi?action=getFileExportState&name=TrafficSnapEventInfo 
+ 
+Response Params ( key=value format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+state 
+int 
+R 
+Export status, the value is 0: success, 
+1: failure, 2: running, 3: the file is 
+invalid, 4: the file is too large, 5: the file 
+has duplicate data 
+1 
+Response Example 
+state=0 
+ 
+Download the exported traffic snapshot event record file 
+Download the exported traffic snapshot event record file 
+Request URL 
+http://<server>/cgi-bin/trafficRecord.cgi?action=downloadFile&Type=TrafficSnapEve
+ntInfo 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+Type 
+char[16] 
+O 
+File type, fixed value: 
+"TrafficSnapEventInfo” 
+"TrafficSnapEventInfo" 
+filename 
+char[256] 
+O 
+The exported file name must be the 
+same as the file name used in the 
+"RecordFile01" 
+DAHUA_HTTP_API V3.52 for BITRU
+=== PAGE 601 ===
+ 
+Intelligent Traffic APIs 600 
+export command 
+(exportAsyncFileByConditon). 
+Request Example 
+http://<server>/cgi-bin/trafficRecord.cgi?action=downloadFile&Type=TrafficSnapEventInfo&filename=
+RecordFile01 
+ 
+Response Params ( binary in body ) 
+Response Example 
+HTTP/1.1 200 OK 
+Server: Device/1.0 
+Content-Type: application/octet-stream 
+Content-Length: xxx 
+ 
+<File Data…> 
+10.4 Traffic Snap Operation 
+10.4.1 Open Strobe 
+Request URL 
+http://<server>/cgi-bin/trafficSnap.cgi?action=openStrobe 
+Method 
+GET 
+Request Params ( key=value format in URL ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+channel 
+int 
+R 
+video channel index which starts from 
+1. 
+1 
+info 
+object 
+R 
+info 
+ 
+openType 
+char[] 
+R 
+For now, the value is fixed to "Normal" "Normal" 
+plateNumber 
+char[] 
+R 
+the plateNumber of the TrafficCar. 
+046XRW 
+Request Example 
+http://192.168.1.108/cgi-
+bin/trafficSnap.cgi?action=openStrobe&channel=1&info.openType=Normal&info.plateNumber=046X
+RW 
+ 
+Response Params ( OK in body ) 
+Response Example 
+OK 
+10.4.2 Close Strobe 
+Request URL 
+http://<server>/cgi-bin/api/trafficSnap/closeStrobe 
+Method 
+POST 
+Request Params ( JSON format in body ) 
+Name 
+Type 
+R/O 
+Description 
+Example 
+info 
+object 
+O 
+close strobe params 
+null 
++location 
+int32 
+O 
+lane number, default 0 
+0 
+Request Example 
+DAHUA_HTTP_API V3.52 for BITRU
