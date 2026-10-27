@@ -1,0 +1,32 @@
+# Данные пользователя и секреты (коммитить только *.example.json)
+config.json
+allowed_plates.json
+gate_log*.jsonl
+debug.log
+
+# Сборка PyInstaller
+build/
+dist/
+*.spec
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Секреты и конфигурация окружения
+.env
+*.env
+
+# IDE
+.idea/
+.vscode/
+
+# Логи и временные файлы
+*.log
+tmp/
+
+DAHUA_HTTP_API V3.52 for BITRU.pdf
